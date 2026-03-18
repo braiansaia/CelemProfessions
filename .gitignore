@@ -1,0 +1,9 @@
+/bin
+/obj
+/ignore
+/dev
+/Libs
+/.vs
+*.user
+*.rsuser
+Properties/PublishProfiles/*.pubxml.user
