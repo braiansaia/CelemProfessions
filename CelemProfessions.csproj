@@ -1,13 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <AssemblyName>CelemTemplate</AssemblyName>
-    <Description>CelemTemplate base plugin template for V Rising</Description>
+    <AssemblyName>CelemProfessions</AssemblyName>
+    <Description>CelemProfessions professions plugin for V Rising</Description>
     <Version>1.0.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>CelemTemplate</RootNamespace>
-    <PackageId>CelemTemplate</PackageId>
+    <RootNamespace>CelemProfessions</RootNamespace>
+    <PackageId>CelemProfessions</PackageId>
     <Authors>SirSaia</Authors>
     <Company>SirSaia</Company>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
@@ -29,3 +29,4 @@
     <Exec Command="copy &quot;$(TargetPath)&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\VRisingDedicatedServer\BepInEx\BloodpebblePlugins&quot; " ContinueOnError="true" />
   </Target>
 </Project>
+
