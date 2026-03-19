@@ -48,6 +48,7 @@ public class Plugin : BasePlugin {
   }
 
   private void OnInitialize() {
+    ProfessionExperienceConfigService.Initialize();
     ProfessionService.Initialize();
     ProfessionsEventPatch.Initialize();
   }

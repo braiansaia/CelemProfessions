@@ -18,18 +18,7 @@ public sealed class PlayerProfessionsData {
   public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
-public sealed class AlchemyConsumableBonusData {
-  public ulong CrafterPlatformId { get; set; }
-  public double PowerMultiplier { get; set; } = 1d;
-  public double DurationMultiplier { get; set; } = 1d;
-  public int RemainingCharges { get; set; } = 1;
-  public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
-}
 
-public sealed class PendingConsumableBonusData {
-  public PrefabGUID ConsumablePrefab { get; set; }
-  public double PowerMultiplier { get; set; } = 1d;
-  public double DurationMultiplier { get; set; } = 1d;
-  public DateTime ExpiresAtUtc { get; set; } = DateTime.UtcNow;
-}
+
+
 

@@ -81,7 +81,8 @@ public static class ProfessionService
 
 	private const string XpSctAssetGuid = "4210316d-23d4-4274-96f5-d6f0944bd0bb";
 
-	private const int CraftedBonusRetentionMinutes = 30;
+	private const double DurabilityCraftExperienceFactor = 0.0725;
+
 
 	private static readonly CultureInfo PercentCulture = CultureInfo.GetCultureInfo("pt-BR");
 
@@ -106,13 +107,9 @@ public static class ProfessionService
 
 	private static readonly Dictionary<ulong, PlayerProfessionsData> PlayerCache = new Dictionary<ulong, PlayerProfessionsData>();
 
-	private static readonly Dictionary<string, AlchemyConsumableBonusData> CraftedConsumableBonusByStack = new Dictionary<string, AlchemyConsumableBonusData>();
 
-	private static readonly Dictionary<ulong, Queue<PendingConsumableBonusData>> PendingConsumableBonusByPlayer = new Dictionary<ulong, Queue<PendingConsumableBonusData>>();
 
-	private static readonly List<string> ExpiredStackKeys = new List<string>();
 
-	private static readonly List<ulong> ExpiredPlayerQueueKeys = new List<ulong>();
 
 	private static bool _initialized;
 
@@ -123,8 +120,6 @@ public static class ProfessionService
 			return;
 		}
 		PlayerCache.Clear();
-		CraftedConsumableBonusByStack.Clear();
-		PendingConsumableBonusByPlayer.Clear();
 		foreach (KeyValuePair<string, PlayerProfessionsData> item in Plugin.Database.GetAllByPrefix<PlayerProfessionsData>("professions/players/"))
 		{
 			PlayerProfessionsData value = item.Value;
@@ -149,8 +144,6 @@ public static class ProfessionService
 	public static void Shutdown()
 	{
 		PlayerCache.Clear();
-		CraftedConsumableBonusByStack.Clear();
-		PendingConsumableBonusByPlayer.Clear();
 		_initialized = false;
 	}
 
@@ -366,7 +359,7 @@ public static class ProfessionService
 		if (player != null && target.Exists() && target.TryGetBuffer<YieldResourcesOnDamageTaken>(out DynamicBuffer<YieldResourcesOnDamageTaken> dynamicBuffer) && !dynamicBuffer.IsEmpty)
 		{
 			PrefabGUID itemType = dynamicBuffer[0].ItemType;
-			if (TryResolveGatherProfession(targetPrefab, itemType, out var profession) && (profession != ProfessionType.Herbalista || (!ProfessionCatalogService.IsVegetationPrefab(targetPrefab) && !ProfessionCatalogService.IsVegetationPrefab(itemType))))
+			if (TryResolveGatherProfession(itemType, out var profession))
 			{
 				HandleGatherEvent(new GatherEventData(player, target, targetPrefab, itemType, profession));
 			}
@@ -377,8 +370,15 @@ public static class ProfessionService
 	{
 		if (gatherEvent.Player != null && gatherEvent.Player.CharacterEntity.Exists())
 		{
-			double baseValue = ProfessionSettingsService.GatherBaseXp * (double)ProfessionCatalogService.GetTierMultiplier(gatherEvent.YieldPrefab);
-			AddExperience(gatherEvent.Player, gatherEvent.Profession, baseValue, out var progress, out var _, out var _);
+			double baseValue = ResolveGatherBaseExperience(gatherEvent);
+			if (baseValue <= 0.0)
+			{
+				return;
+			}
+			double xpMultiplier = ProfessionSettingsService.GetXpMultiplier(gatherEvent.Profession);
+			double calculatedXp = Math.Floor(Math.Max(0.0, baseValue) * xpMultiplier);
+			AddExperience(gatherEvent.Player, gatherEvent.Profession, baseValue, out var progress, out var gainedExperience, out var _);
+			LogExperienceGain(gatherEvent.Player, gatherEvent.Profession, "Gather", gatherEvent.TargetPrefab, gatherEvent.YieldPrefab, baseValue, xpMultiplier, calculatedXp, gainedExperience, progress.Level);
 			switch (gatherEvent.Profession)
 			{
 			case ProfessionType.Minerador:
@@ -399,10 +399,12 @@ public static class ProfessionService
 
 	public static void HandleHunterKillEvent(in HunterKillEventData hunterEvent)
 	{
-		if (hunterEvent.Player != null && hunterEvent.Target.Exists() && !hunterEvent.Target.IsPlayer() && TryResolveLeatherDrop(hunterEvent.TargetPrefab, out var leatherPrefab))
+		if (hunterEvent.Player != null && hunterEvent.Target.Exists() && !hunterEvent.Target.IsPlayer() && ProfessionExperienceConfigService.TryGetHunterExperience(hunterEvent.TargetPrefab, out var baseValue, out var leatherPrefab))
 		{
-			double baseValue = ProfessionSettingsService.HunterBaseXp * (double)ProfessionCatalogService.GetTierMultiplier(leatherPrefab);
-			AddExperience(hunterEvent.Player, ProfessionType.Cacador, baseValue, out var progress, out var _, out var _);
+			double xpMultiplier = ProfessionSettingsService.GetXpMultiplier(ProfessionType.Cacador);
+			double calculatedXp = Math.Floor(Math.Max(0.0, baseValue) * xpMultiplier);
+			AddExperience(hunterEvent.Player, ProfessionType.Cacador, baseValue, out var progress, out var gainedExperience, out var _);
+			LogExperienceGain(hunterEvent.Player, ProfessionType.Cacador, "Hunter", hunterEvent.TargetPrefab, leatherPrefab, baseValue, xpMultiplier, calculatedXp, gainedExperience, progress.Level);
 			int num = CalculateYieldBonus(progress.Level, ProfessionSettingsService.CacadorLeatherYieldMultiplier);
 			if (num > 0)
 			{
@@ -417,7 +419,11 @@ public static class ProfessionService
 		{
 			return;
 		}
-		AddExperience(fishingEvent.Player, ProfessionType.Pescador, ProfessionSettingsService.FishingBaseXp, out var progress, out var _, out var _);
+		double baseValue = ProfessionSettingsService.FishingBaseXp;
+		double xpMultiplier = ProfessionSettingsService.GetXpMultiplier(ProfessionType.Pescador);
+		double calculatedXp = Math.Floor(Math.Max(0.0, baseValue) * xpMultiplier);
+		AddExperience(fishingEvent.Player, ProfessionType.Pescador, baseValue, out var progress, out var gainedExperience, out var _);
+		LogExperienceGain(fishingEvent.Player, ProfessionType.Pescador, "Fishing", fishingEvent.FishingAreaPrefab, PrefabGUID.Empty, baseValue, xpMultiplier, calculatedXp, gainedExperience, progress.Level);
 		if (RollChance(ProfessionSettingsService.PescadorExtraFishChanceAtMax * (double)progress.Level / 100.0))
 		{
 			List<PrefabGUID> fishingAreaDrops = ProfessionCatalogService.GetFishingAreaDrops(fishingEvent.FishingAreaPrefab);
@@ -429,22 +435,98 @@ public static class ProfessionService
 		}
 	}
 
+	private static double ResolveGatherBaseExperience(in GatherEventData gatherEvent)
+	{
+		switch (gatherEvent.Profession)
+		{
+		case ProfessionType.Minerador:
+		case ProfessionType.Lenhador:
+		case ProfessionType.Herbalista:
+			if (!ProfessionExperienceConfigService.TryGetGatherExperience(gatherEvent.Profession, gatherEvent.TargetPrefab, out var configuredExperience))
+			{
+				return 0.0;
+			}
+			return Math.Max(0.0, configuredExperience);
+		default:
+			return ProfessionSettingsService.GatherBaseXp * (double)ProfessionCatalogService.GetTierMultiplier(gatherEvent.YieldPrefab);
+		}
+	}
+
+	private static bool TryResolveCraftBaseExperience(ProfessionType profession, PrefabGUID itemPrefab, out double baseValue)
+	{
+		baseValue = 0.0;
+		switch (profession)
+		{
+		case ProfessionType.Joalheiro:
+		case ProfessionType.Alfaiate:
+		case ProfessionType.Ferreiro:
+			return TryResolveDurabilityBasedCraftExperience(itemPrefab, out baseValue);
+		case ProfessionType.Alquimista:
+			return ProfessionExperienceConfigService.TryGetAlchemyCraftExperience(itemPrefab, out baseValue);
+		default:
+			baseValue = ProfessionSettingsService.CraftBaseXp * (double)ProfessionCatalogService.GetTierMultiplier(itemPrefab);
+			return baseValue > 0.0;
+		}
+	}
+
+	private static bool TryResolveDurabilityBasedCraftExperience(PrefabGUID itemPrefab, out double baseValue)
+	{
+		baseValue = 0.0;
+		if (!GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(itemPrefab, out Entity prefabEntity) || !prefabEntity.Exists() || !prefabEntity.TryGetComponent(out Durability durability) || durability.MaxDurability <= 0f)
+		{
+			return false;
+		}
+		baseValue = Math.Max(0.0, (double)durability.MaxDurability * DurabilityCraftExperienceFactor);
+		return baseValue > 0.0;
+	}
 	public static void HandleCraftedItem(ulong platformId, PlayerData player, Entity workstation, Entity itemEntity, PrefabGUID itemPrefab, int amount)
 	{
-		if (itemPrefab.IsEmpty() || amount <= 0 || !TryResolveCraftProfession(itemPrefab, out var profession))
+		if (itemPrefab.IsEmpty() || amount <= 0)
 		{
+			if (Plugin.LogInstance != null)
+			{
+				Plugin.LogInstance.LogInfo($"[ProfessionsXP][CraftSkip] platform={platformId} reason=invalid-item amount={amount} item={FormatPrefabForLog(itemPrefab)} station={workstation.Index}:{workstation.Version}");
+			}
 			return;
 		}
+
+		if (!TryResolveCraftProfession(itemPrefab, out var profession))
+		{
+			if (Plugin.LogInstance != null)
+			{
+				Plugin.LogInstance.LogInfo($"[ProfessionsXP][CraftSkip] platform={platformId} reason=no-profession item={FormatPrefabForLog(itemPrefab)} amount={amount} station={workstation.Index}:{workstation.Version}");
+			}
+			return;
+		}
+
 		if (player == null && !TryResolveOnlinePlayer(platformId, out player))
 		{
 			TryResolveCachedPlayer(platformId, out player);
 		}
-		if (player != null)
+
+		if (player == null)
 		{
-			double baseValue = ProfessionSettingsService.CraftBaseXp * (double)ProfessionCatalogService.GetTierMultiplier(itemPrefab);
-			AddExperience(player, profession, baseValue, out var progress, out var _, out var _);
-			switch (profession)
+			if (Plugin.LogInstance != null)
 			{
+				Plugin.LogInstance.LogInfo($"[ProfessionsXP][CraftSkip] platform={platformId} reason=player-not-found item={FormatPrefabForLog(itemPrefab)} amount={amount} station={workstation.Index}:{workstation.Version}");
+			}
+			return;
+		}
+
+		if (!TryResolveCraftBaseExperience(profession, itemPrefab, out double baseValue))
+		{
+			return;
+		}
+
+		double xpMultiplier = ProfessionSettingsService.GetXpMultiplier(profession);
+		double calculatedXp = Math.Floor(Math.Max(0.0, baseValue) * xpMultiplier);
+		AddExperience(player, profession, baseValue, out var progress, out var gainedExperience, out var _);
+		PrefabGUID prefabGuid = workstation.Exists() ? workstation.GetPrefabGuid() : PrefabGUID.Empty;
+		string sourceContext = (profession == ProfessionType.Alquimista) ? "CraftConsumable" : "Craft";
+		LogExperienceGain(player, profession, sourceContext, prefabGuid, itemPrefab, baseValue, xpMultiplier, calculatedXp, gainedExperience, progress.Level);
+
+		switch (profession)
+		{
 			case ProfessionType.Joalheiro:
 				ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.JoalheiroDurabilityBonusAtMax);
 				break;
@@ -454,63 +536,6 @@ public static class ProfessionService
 			case ProfessionType.Ferreiro:
 				ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.FerreiroDurabilityBonusAtMax);
 				break;
-			case ProfessionType.Alquimista:
-				RegisterCraftedConsumableBonus(platformId, itemEntity, itemPrefab, amount, progress.Level);
-				break;
-			}
-		}
-	}
-
-	public static void HandleConsumableRemoved(ulong platformId, Entity inventoryEntity, Entity itemEntity, PrefabGUID itemPrefab, int amount)
-	{
-		if (amount <= 0 || itemPrefab.IsEmpty() || !ProfessionCatalogService.IsConsumablePrefab(itemPrefab) || !itemEntity.Exists())
-		{
-			return;
-		}
-		if (itemEntity.TryGetComponent<InventoryItem>(out InventoryItem componentData))
-		{
-			Entity containerEntity = componentData.ContainerEntity;
-			if (containerEntity.Exists() && containerEntity != inventoryEntity)
-			{
-				return;
-			}
-		}
-		PruneCraftedConsumableCache();
-		PrunePendingConsumableBonusCache();
-		string entityKey = GetEntityKey(itemEntity);
-		if (!CraftedConsumableBonusByStack.TryGetValue(entityKey, out var value) || value.RemainingCharges <= 0)
-		{
-			return;
-		}
-		int num = Math.Min(amount, value.RemainingCharges);
-		if (num > 0)
-		{
-			value.RemainingCharges -= num;
-			if (value.RemainingCharges <= 0)
-			{
-				CraftedConsumableBonusByStack.Remove(entityKey);
-			}
-			else
-			{
-				value.CreatedAtUtc = DateTime.UtcNow;
-				CraftedConsumableBonusByStack[entityKey] = value;
-			}
-			if (!PendingConsumableBonusByPlayer.TryGetValue(platformId, out var value2))
-			{
-				value2 = new Queue<PendingConsumableBonusData>();
-				PendingConsumableBonusByPlayer[platformId] = value2;
-			}
-			DateTime expiresAtUtc = DateTime.UtcNow.AddSeconds(6.0);
-			for (int i = 0; i < num; i++)
-			{
-				value2.Enqueue(new PendingConsumableBonusData
-				{
-					ConsumablePrefab = itemPrefab,
-					PowerMultiplier = value.PowerMultiplier,
-					DurationMultiplier = value.DurationMultiplier,
-					ExpiresAtUtc = expiresAtUtc
-				});
-			}
 		}
 	}
 
@@ -520,13 +545,21 @@ public static class ProfessionService
 		{
 			return;
 		}
-		PrunePendingConsumableBonusCache();
 		PlayerData playerData = componentData.Target.GetPlayerData();
-		if (playerData != null && TryDequeuePendingConsumableBonus(playerData.PlatformId, out var pendingBonus))
+		if (playerData == null)
 		{
-			ApplyConsumableBuffBonus(buffEntity, pendingBonus);
-				MessageService.SendInfo(playerData, $"Consumivel aprimorado aplicado: poder x{pendingBonus.PowerMultiplier:0.###} | duracao x{pendingBonus.DurationMultiplier:0.###}.");
+			return;
 		}
+		ProfessionProgressData professionProgress = GetProfessionProgress(EnsurePlayerData(playerData.PlatformId), ProfessionType.Alquimista);
+		double powerMultiplier = 1.0 + ProfessionSettingsService.AlquimistaPowerBonusAtMax * (double)professionProgress.Level / 100.0;
+		double durationMultiplier = 1.0 + ProfessionSettingsService.AlquimistaDurationBonusAtMax * (double)professionProgress.Level / 100.0;
+		if (powerMultiplier <= 1.0 && durationMultiplier <= 1.0)
+		{
+			return;
+		}
+		ApplyConsumableBuffBonus(buffEntity, powerMultiplier, durationMultiplier);
+		LogAlchemyBuffApplied(playerData.PlatformId, componentData2, powerMultiplier, durationMultiplier, professionProgress.Level);
+		MessageService.SendInfo(playerData, $"Consumivel aprimorado aplicado: poder x{powerMultiplier:0.###} | duracao x{durationMultiplier:0.###}.");
 	}
 
 	public static string FormatPercent(double percent)
@@ -703,68 +736,33 @@ public static class ProfessionService
 		}
 	}
 
-	private static void RegisterCraftedConsumableBonus(ulong platformId, Entity itemEntity, PrefabGUID itemPrefab, int amount, int level)
+	private static void ApplyConsumableBuffBonus(Entity buffEntity, double powerMultiplier, double durationMultiplier)
 	{
-		if (itemEntity.Exists() && amount > 0)
-		{
-			PruneCraftedConsumableCache();
-			PrunePendingConsumableBonusCache();
-			double num = 1.0 + ProfessionSettingsService.AlquimistaPowerBonusAtMax * (double)level / 100.0;
-			double num2 = 1.0 + ProfessionSettingsService.AlquimistaDurationBonusAtMax * (double)level / 100.0;
-			string entityKey = GetEntityKey(itemEntity);
-			if (CraftedConsumableBonusByStack.TryGetValue(entityKey, out var value))
-			{
-				value.RemainingCharges += amount;
-				value.PowerMultiplier = num;
-				value.DurationMultiplier = num2;
-				value.CreatedAtUtc = DateTime.UtcNow;
-				CraftedConsumableBonusByStack[entityKey] = value;
-			}
-			else
-			{
-				CraftedConsumableBonusByStack[entityKey] = new AlchemyConsumableBonusData
-				{
-					CrafterPlatformId = platformId,
-					PowerMultiplier = num,
-					DurationMultiplier = num2,
-					RemainingCharges = amount,
-					CreatedAtUtc = DateTime.UtcNow
-				};
-			}
-			if (TryResolveOnlinePlayer(platformId, out var player))
-			{
-				MessageService.SendInfo(player, $"Consumivel criado com bonus de alquimia: poder x{num:0.###} | duracao x{num2:0.###}.");
-			}
-		}
-	}
-
-	private static void ApplyConsumableBuffBonus(Entity buffEntity, PendingConsumableBonusData pendingBonus)
-	{
-		if (pendingBonus.PowerMultiplier > 1.0 && buffEntity.TryGetBuffer<ModifyUnitStatBuff_DOTS>(out DynamicBuffer<ModifyUnitStatBuff_DOTS> dynamicBuffer) && !dynamicBuffer.IsEmpty)
+		if (powerMultiplier > 1.0 && buffEntity.TryGetBuffer<ModifyUnitStatBuff_DOTS>(out DynamicBuffer<ModifyUnitStatBuff_DOTS> dynamicBuffer) && !dynamicBuffer.IsEmpty)
 		{
 			for (int i = 0; i < dynamicBuffer.Length; i++)
 			{
 				ModifyUnitStatBuff_DOTS val = dynamicBuffer[i];
-				val.Value = (float)((double)val.Value * pendingBonus.PowerMultiplier);
+				val.Value = (float)((double)val.Value * powerMultiplier);
 				dynamicBuffer[i] = val;
 			}
 		}
-		if (pendingBonus.DurationMultiplier > 1.0 && buffEntity.Has<LifeTime>())
+		if (durationMultiplier > 1.0 && buffEntity.Has<LifeTime>())
 		{
 			buffEntity.With<LifeTime>((ECSExtensions.WithRefHandler<LifeTime>)delegate(ref LifeTime lifeTime)
 			{
 				if (lifeTime.Duration > 0f)
 				{
-					lifeTime.Duration = (float)((double)lifeTime.Duration * pendingBonus.DurationMultiplier);
+					lifeTime.Duration = (float)((double)lifeTime.Duration * durationMultiplier);
 				}
 			});
 		}
-		if (pendingBonus.DurationMultiplier > 1.0 && buffEntity.Has<HealOnGameplayEvent>() && buffEntity.TryGetBuffer<CreateGameplayEventsOnTick>(out DynamicBuffer<CreateGameplayEventsOnTick> dynamicBuffer2) && !dynamicBuffer2.IsEmpty)
+		if (durationMultiplier > 1.0 && buffEntity.Has<HealOnGameplayEvent>() && buffEntity.TryGetBuffer<CreateGameplayEventsOnTick>(out DynamicBuffer<CreateGameplayEventsOnTick> dynamicBuffer2) && !dynamicBuffer2.IsEmpty)
 		{
 			for (int num = 0; num < dynamicBuffer2.Length; num++)
 			{
 				CreateGameplayEventsOnTick val2 = dynamicBuffer2[num];
-				val2.MaxTicks = Math.Max(1, (int)Math.Round((double)val2.MaxTicks * pendingBonus.DurationMultiplier));
+				val2.MaxTicks = Math.Max(1, (int)Math.Round((double)val2.MaxTicks * durationMultiplier));
 				dynamicBuffer2[num] = val2;
 			}
 		}
@@ -793,7 +791,7 @@ public static class ProfessionService
 			}
 	}
 
-	private static bool TryResolveGatherProfession(PrefabGUID targetPrefab, PrefabGUID yieldPrefab, out ProfessionType profession)
+	private static bool TryResolveGatherProfession(PrefabGUID yieldPrefab, out ProfessionType profession)
 	{
 		profession = ProfessionType.Minerador;
 		if (ProfessionCatalogService.IsGemPrefab(yieldPrefab))
@@ -811,7 +809,7 @@ public static class ProfessionService
 			profession = ProfessionType.Lenhador;
 			return true;
 		}
-		if (ProfessionCatalogService.IsPlantPrefab(yieldPrefab) && !ProfessionCatalogService.IsVegetationPrefab(targetPrefab))
+		if (ProfessionCatalogService.IsPlantPrefab(yieldPrefab))
 		{
 			profession = ProfessionType.Herbalista;
 			return true;
@@ -845,106 +843,6 @@ public static class ProfessionService
 		return false;
 	}
 
-	private static bool TryResolveLeatherDrop(PrefabGUID targetPrefab, out PrefabGUID leatherPrefab)
-	{
-		leatherPrefab = PrefabGUID.Empty;
-		Entity entity = default(Entity);
-		if (!GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(targetPrefab, out entity) || !entity.Exists() || !entity.TryGetBuffer<DropTableBuffer>(out DynamicBuffer<DropTableBuffer> dynamicBuffer) || dynamicBuffer.IsEmpty)
-		{
-			return false;
-		}
-		Entity entity2 = default(Entity);
-		for (int i = 0; i < dynamicBuffer.Length; i++)
-		{
-			PrefabGUID dropTableGuid = dynamicBuffer[i].DropTableGuid;
-			if (!GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(dropTableGuid, out entity2) || !entity2.Exists() || !entity2.TryGetBuffer<DropTableDataBuffer>(out DynamicBuffer<DropTableDataBuffer> dynamicBuffer2) || dynamicBuffer2.IsEmpty)
-			{
-				continue;
-			}
-			for (int j = 0; j < dynamicBuffer2.Length; j++)
-			{
-				PrefabGUID itemGuid = dynamicBuffer2[j].ItemGuid;
-				if (ProfessionCatalogService.IsLeatherPrefab(itemGuid))
-				{
-					leatherPrefab = itemGuid;
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	private static bool TryDequeuePendingConsumableBonus(ulong platformId, out PendingConsumableBonusData pendingBonus)
-	{
-		pendingBonus = null;
-		if (!PendingConsumableBonusByPlayer.TryGetValue(platformId, out var value) || value.Count == 0)
-		{
-			return false;
-		}
-		DateTime utcNow = DateTime.UtcNow;
-		while (value.Count > 0)
-		{
-			PendingConsumableBonusData pendingConsumableBonusData = value.Dequeue();
-			if (!(pendingConsumableBonusData.ExpiresAtUtc <= utcNow))
-			{
-				pendingBonus = pendingConsumableBonusData;
-				if (value.Count == 0)
-				{
-					PendingConsumableBonusByPlayer.Remove(platformId);
-				}
-				return true;
-			}
-		}
-		PendingConsumableBonusByPlayer.Remove(platformId);
-		return false;
-	}
-
-	private static void PruneCraftedConsumableCache()
-	{
-		if (CraftedConsumableBonusByStack.Count == 0)
-		{
-			return;
-		}
-		ExpiredStackKeys.Clear();
-		DateTime dateTime = DateTime.UtcNow.AddMinutes(-30.0);
-		foreach (KeyValuePair<string, AlchemyConsumableBonusData> item in CraftedConsumableBonusByStack)
-		{
-			if (item.Value == null || item.Value.RemainingCharges <= 0 || item.Value.CreatedAtUtc < dateTime)
-			{
-				ExpiredStackKeys.Add(item.Key);
-			}
-		}
-		for (int i = 0; i < ExpiredStackKeys.Count; i++)
-		{
-			CraftedConsumableBonusByStack.Remove(ExpiredStackKeys[i]);
-		}
-	}
-
-	private static void PrunePendingConsumableBonusCache()
-	{
-		if (PendingConsumableBonusByPlayer.Count == 0)
-		{
-			return;
-		}
-		ExpiredPlayerQueueKeys.Clear();
-		DateTime utcNow = DateTime.UtcNow;
-		foreach (KeyValuePair<ulong, Queue<PendingConsumableBonusData>> item in PendingConsumableBonusByPlayer)
-		{
-			Queue<PendingConsumableBonusData> value = item.Value;
-			while (value.Count > 0 && value.Peek().ExpiresAtUtc <= utcNow)
-			{
-				value.Dequeue();
-			}
-			if (value.Count == 0)
-			{
-				ExpiredPlayerQueueKeys.Add(item.Key);
-			}
-		}
-		for (int i = 0; i < ExpiredPlayerQueueKeys.Count; i++)
-		{
-			PendingConsumableBonusByPlayer.Remove(ExpiredPlayerQueueKeys[i]);
-		}
-	}
 
 	private static bool RollChance(double chance)
 	{
@@ -987,6 +885,47 @@ public static class ProfessionService
 		return true;
 	}
 
+	private static void LogExperienceGain(PlayerData player, ProfessionType profession, string sourceContext, PrefabGUID sourcePrefab, PrefabGUID resultPrefab, double baseValue, double xpMultiplier, double calculatedXp, double gainedExperience, int level)
+	{
+		if (Plugin.LogInstance == null)
+		{
+			return;
+		}
+
+		ulong platformId = (player != null) ? player.PlatformId : 0uL;
+		Plugin.LogInstance.LogInfo($"[ProfessionsXP] Context={sourceContext} Player={platformId} Profession={profession} BaseXP={baseValue:0.###} Multiplier={xpMultiplier:0.###} CalculatedXP={calculatedXp:0.###} GainedXP={gainedExperience:0.###} Level={level} Source={FormatPrefabForLog(sourcePrefab)} Result={FormatPrefabForLog(resultPrefab)}");
+	}
+
+	private static void LogAlchemyBuffApplied(ulong platformId, PrefabGUID buffPrefab, double powerMultiplier, double durationMultiplier, int level)
+	{
+		if (Plugin.LogInstance == null)
+		{
+			return;
+		}
+
+		Plugin.LogInstance.LogInfo($"[ProfessionsXP][AlchemyBuff] Player={platformId} Profession=Alquimista Level={level} Buff={FormatPrefabForLog(buffPrefab)} PowerMult={powerMultiplier:0.###} DurationMult={durationMultiplier:0.###}");
+	}
+
+	private static string FormatPrefabForLog(PrefabGUID prefab)
+	{
+		if (prefab.IsEmpty())
+		{
+			return "Empty(0)";
+		}
+
+		string name;
+		try
+		{
+			name = prefab.GetName();
+		}
+		catch
+		{
+			name = "Unknown";
+		}
+
+		return $"{name}({prefab.GuidHash})";
+	}
+
 	private static float3 ParseHexColor(string hex, float3 fallback)
 	{
 		if (string.IsNullOrWhiteSpace(hex))
@@ -1010,10 +949,6 @@ public static class ProfessionService
 		return (int)Math.Max(1.0, Math.Round(Math.Max(0.0, value)));
 	}
 
-	private static string GetEntityKey(Entity entity)
-	{
-		return $"{entity.Index}:{entity.Version}";
-	}
 
 	private static double GetLevelPercent(double experience, int level)
 	{
@@ -1207,3 +1142,25 @@ public static class ProfessionService
 		return false;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

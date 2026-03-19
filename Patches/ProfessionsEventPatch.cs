@@ -13,7 +13,7 @@ public static class ProfessionsEventPatch {
   public static void Initialize() {
     EventManager.On(PlayerEvents.PlayerJoined, HandlePlayerJoined);
     EventManager.On(PostfixEvents.OnDeath, HandleDeathEvents);
-    EventManager.On(PostfixEvents.OnInventoryChanged, HandleInventoryChanged);
+    EventManager.On(PrefixEvents.OnInventoryChanged, HandleInventoryChanged);
   }
 
   private static void HandlePlayerJoined(PlayerData player) {
