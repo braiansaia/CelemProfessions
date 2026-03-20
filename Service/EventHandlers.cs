@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using CelemProfessions.Events;
 using CelemProfessions.Models;
 using ProjectM;
@@ -20,9 +19,9 @@ public static partial class ProfessionService {
       return;
     }
 
-    PrefabGUID itemType = yields[0].ItemType;
-    if (TryResolveGatherProfession(itemType, out ProfessionType profession)) {
-      HandleGatherEvent(new GatherEventData(player, targetPrefab, itemType, profession));
+    PrefabGUID yieldPrefab = yields[0].ItemType;
+    if (TryResolveGatherProfession(yieldPrefab, out ProfessionsTypes profession)) {
+      HandleGatherEvent(new GatherEventData(player, targetPrefab, yieldPrefab, profession));
     }
   }
 
@@ -38,17 +37,14 @@ public static partial class ProfessionService {
 
     AddExperience(gatherEvent.Player, gatherEvent.Profession, baseValue, out ProfessionProgressData progress, out _, out _);
     switch (gatherEvent.Profession) {
-      case ProfessionType.Minerador:
+      case ProfessionsTypes.Minerador:
         HandleMinerRewards(gatherEvent.Player, gatherEvent.YieldPrefab, progress.Level, extraAtMaxLevel);
         break;
-      case ProfessionType.Lenhador:
+      case ProfessionsTypes.Lenhador:
         HandleWoodRewards(gatherEvent.Player, gatherEvent.YieldPrefab, progress.Level, extraAtMaxLevel);
         break;
-      case ProfessionType.Herbalista:
+      case ProfessionsTypes.Herbalista:
         HandleHerbalRewards(gatherEvent.Player, gatherEvent.YieldPrefab, progress.Level, extraAtMaxLevel);
-        break;
-      case ProfessionType.Joalheiro:
-        HandleJewelGatherRewards(gatherEvent.Player, gatherEvent.YieldPrefab, progress.Level);
         break;
     }
   }
@@ -62,10 +58,10 @@ public static partial class ProfessionService {
       return;
     }
 
-    AddExperience(hunterEvent.Player, ProfessionType.Cacador, baseValue, out ProfessionProgressData progress, out _, out _);
+    AddExperience(hunterEvent.Player, ProfessionsTypes.Cacador, baseValue, out ProfessionProgressData progress, out _, out _);
     int extraReward = CalculateScaledExtraBonus(progress.Level, extraAtMaxLevel);
     if (extraReward > 0) {
-      GiveReward(hunterEvent.Player, ProfessionType.Cacador, leatherPrefab, extraReward);
+      GiveReward(hunterEvent.Player, ProfessionsTypes.Cacador, leatherPrefab, extraReward);
     }
   }
 
@@ -74,18 +70,14 @@ public static partial class ProfessionService {
       return;
     }
 
-    AddExperience(fishingEvent.Player, ProfessionType.Pescador, ProfessionSettingsService.FishingBaseXp, out ProfessionProgressData progress, out _, out _);
-    if (!RollChance(ProfessionSettingsService.PescadorExtraFishChanceAtMax * progress.Level / 100d)) {
+    AddExperience(fishingEvent.Player, ProfessionsTypes.Pescador, ProfessionSettingsService.FishingBaseXp, out ProfessionProgressData progress, out _, out _);
+    if (!RollChance(ProfessionSettingsService.PescadorFishChanceAtMax * progress.Level / 100d)) {
       return;
     }
 
-    List<PrefabGUID> fishingAreaDrops = ProfessionCatalogService.GetFishingAreaDrops(fishingEvent.FishingAreaPrefab);
-    if (fishingAreaDrops.Count == 0) {
-      return;
+    if (RewardConfigService.TryGetRandomFishingReward(fishingEvent.FishingAreaPrefab, progress.Level, out PrefabGUID rewardPrefab)) {
+      GiveReward(fishingEvent.Player, ProfessionsTypes.Pescador, rewardPrefab, 1);
     }
-
-    PrefabGUID itemPrefab = fishingAreaDrops[Random.Next(0, fishingAreaDrops.Count)];
-    GiveReward(fishingEvent.Player, ProfessionType.Pescador, itemPrefab, ProfessionSettingsService.PescadorExtraFishAmount);
   }
 
   public static void HandleFishingGameplayEvent(Entity entity) {
@@ -103,33 +95,26 @@ public static partial class ProfessionService {
       return;
     }
 
-    PrefabGUID fishingAreaPrefab = dropTableBuffer[0].DropTableGuid;
-    HandleFishingEvent(new FishingEventData(player, fishingAreaPrefab));
+    HandleFishingEvent(new FishingEventData(player, dropTableBuffer[0].DropTableGuid));
   }
 
   private static double ResolveGatherBaseExperience(in GatherEventData gatherEvent, out int extraAtMaxLevel) {
     extraAtMaxLevel = 0;
     return gatherEvent.Profession switch {
-      ProfessionType.Minerador or ProfessionType.Lenhador or ProfessionType.Herbalista or ProfessionType.Joalheiro => ProfessionExperienceConfigService.TryGetGatherConfiguration(gatherEvent.Profession, gatherEvent.TargetPrefab, out double configuredExperience, out extraAtMaxLevel)
+      ProfessionsTypes.Minerador or ProfessionsTypes.Lenhador or ProfessionsTypes.Herbalista => ProfessionExperienceConfigService.TryGetGatherConfiguration(gatherEvent.Profession, gatherEvent.TargetPrefab, out double configuredExperience, out extraAtMaxLevel)
         ? Math.Max(0d, configuredExperience)
         : 0d,
       _ => 0d
     };
   }
 
-  private static bool TryResolveCraftBaseExperience(ProfessionType profession, PrefabGUID itemPrefab, out double baseValue) {
+  private static bool TryResolveCraftBaseExperience(ProfessionsTypes profession, PrefabGUID itemPrefab, out double baseValue) {
     baseValue = 0d;
-    switch (profession) {
-      case ProfessionType.Joalheiro:
-      case ProfessionType.Alfaiate:
-      case ProfessionType.Ferreiro:
-        return TryResolveDurabilityBasedCraftExperience(itemPrefab, out baseValue);
-      case ProfessionType.Alquimista:
-        return ProfessionExperienceConfigService.TryGetAlchemyCraftExperience(itemPrefab, out baseValue);
-      default:
-        baseValue = 50d * ProfessionCatalogService.GetTierMultiplier(itemPrefab);
-        return baseValue > 0d;
-    }
+    return profession switch {
+      ProfessionsTypes.Joalheiro or ProfessionsTypes.Alfaiate or ProfessionsTypes.Ferreiro => TryResolveDurabilityBasedCraftExperience(itemPrefab, out baseValue),
+      ProfessionsTypes.Alquimista => ProfessionExperienceConfigService.TryGetAlchemyCraftExperience(itemPrefab, out baseValue),
+      _ => false
+    };
   }
 
   private static bool TryResolveDurabilityBasedCraftExperience(PrefabGUID itemPrefab, out double baseValue) {
@@ -138,7 +123,7 @@ public static partial class ProfessionService {
       return false;
     }
 
-    baseValue = Math.Max(0d, durability.MaxDurability * DurabilityCraftExperienceFactor);
+    baseValue = Math.Max(0d, durability.MaxDurability);
     return baseValue > 0d;
   }
 
@@ -147,7 +132,7 @@ public static partial class ProfessionService {
       return;
     }
 
-    if (!TryResolveCraftProfession(itemPrefab, out ProfessionType profession)) {
+    if (!TryResolveCraftProfession(itemPrefab, out ProfessionsTypes profession)) {
       return;
     }
 
@@ -157,13 +142,14 @@ public static partial class ProfessionService {
 
     AddExperience(player, profession, baseValue, out ProfessionProgressData progress, out _, out _);
     switch (profession) {
-      case ProfessionType.Joalheiro:
+      case ProfessionsTypes.Joalheiro:
         ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.JoalheiroDurabilityBonusAtMax);
+        HandleJewelCraftRewards(player, progress.Level);
         break;
-      case ProfessionType.Alfaiate:
+      case ProfessionsTypes.Alfaiate:
         ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.AlfaiateDurabilityBonusAtMax);
         break;
-      case ProfessionType.Ferreiro:
+      case ProfessionsTypes.Ferreiro:
         ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.FerreiroDurabilityBonusAtMax);
         break;
     }
@@ -179,9 +165,9 @@ public static partial class ProfessionService {
       return;
     }
 
-    ProfessionProgressData professionProgress = GetProfessionProgress(EnsurePlayerData(playerData.PlatformId), ProfessionType.Alquimista);
-    double powerMultiplier = 1d + ProfessionSettingsService.AlquimistaPowerBonusAtMax * professionProgress.Level / 100d;
-    double durationMultiplier = 1d + ProfessionSettingsService.AlquimistaDurationBonusAtMax * professionProgress.Level / 100d;
+    ProfessionProgressData progress = GetProfessionProgress(EnsurePlayerData(playerData.PlatformId), ProfessionsTypes.Alquimista);
+    double powerMultiplier = 1d + ProfessionSettingsService.AlquimistaPowerBonusAtMax * progress.Level / 100d;
+    double durationMultiplier = 1d + ProfessionSettingsService.AlquimistaDurationBonusAtMax * progress.Level / 100d;
     if (powerMultiplier <= 1d && durationMultiplier <= 1d) {
       return;
     }

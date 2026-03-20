@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Globalization;
 using CelemProfessions.Models;
 using ProjectM;
@@ -15,14 +14,14 @@ namespace CelemProfessions.Service;
 
 public static partial class ProfessionService {
   public static string FormatPercent(double percent) {
-    return Math.Clamp(percent, 0d, 99.999).ToString("0.000", PercentCulture);
+    return Math.Clamp(percent, 0d, 99.999d).ToString("0.000", PercentCulture);
   }
 
   public static string FormatExperience(double value) {
     return Math.Round(Math.Max(0d, value), 0).ToString("N0", CultureInfo.InvariantCulture);
   }
 
-  private static void AddExperience(PlayerData player, ProfessionType profession, double baseValue, out ProfessionProgressData progress, out double gainedExperience, out bool leveledUp) {
+  private static void AddExperience(PlayerData player, ProfessionsTypes profession, double baseValue, out ProfessionProgressData progress, out double gainedExperience, out bool leveledUp) {
     gainedExperience = 0d;
     leveledUp = false;
     if (player == null) {
@@ -30,15 +29,16 @@ public static partial class ProfessionService {
       return;
     }
 
-    PlayerProfessionsData playerProfessionsData = EnsurePlayerData(player.PlatformId);
-    progress = GetProfessionProgress(playerProfessionsData, profession);
+    PlayerProfessionsData playerData = EnsurePlayerData(player.PlatformId);
+    progress = GetProfessionProgress(playerData, profession);
     int previousLevel = progress.Level;
     double previousExperience = progress.Experience;
-    if (progress.Level >= 100) {
-      double maxExperience = ConvertLevelToXp(100);
-      if (progress.Experience != maxExperience) {
+    int maxLevel = ProgressionService.GetMaxLevel();
+    double maxExperience = ProgressionService.GetLevelStartExperience(maxLevel);
+    if (progress.Level >= maxLevel) {
+      if (Math.Abs(progress.Experience - maxExperience) > double.Epsilon) {
         progress.Experience = maxExperience;
-        SavePlayerData(playerProfessionsData);
+        SavePlayerData(playerData);
       }
 
       return;
@@ -50,21 +50,20 @@ public static partial class ProfessionService {
       return;
     }
 
-    double maxLevelExperience = ConvertLevelToXp(100);
-    progress.Experience = Math.Min(maxLevelExperience, previousExperience + resolvedExperience);
-    progress.Level = ConvertXpToLevel(progress.Experience);
-    if (progress.Level >= 100) {
-      progress.Level = 100;
-      progress.Experience = maxLevelExperience;
+    progress.Experience = Math.Min(maxExperience, previousExperience + resolvedExperience);
+    progress.Level = ProgressionService.GetLevelFromExperience(progress.Experience);
+    if (progress.Level >= maxLevel) {
+      progress.Level = maxLevel;
+      progress.Experience = maxExperience;
     }
 
     gainedExperience = Math.Max(0d, progress.Experience - previousExperience);
     leveledUp = progress.Level > previousLevel;
-    SavePlayerData(playerProfessionsData);
-    NotifyExperienceGain(player, playerProfessionsData, profession, progress, gainedExperience, leveledUp);
+    SavePlayerData(playerData);
+    NotifyExperienceGain(player, playerData, profession, progress, gainedExperience, leveledUp);
   }
 
-  private static void NotifyExperienceGain(PlayerData player, PlayerProfessionsData playerData, ProfessionType profession, ProfessionProgressData progress, double gainedExperience, bool leveledUp) {
+  private static void NotifyExperienceGain(PlayerData player, PlayerProfessionsData playerData, ProfessionsTypes profession, ProfessionProgressData progress, double gainedExperience, bool leveledUp) {
     if (player == null || gainedExperience <= 0d) {
       return;
     }
@@ -75,10 +74,10 @@ public static partial class ProfessionService {
     }
 
     if (playerData.ExperienceLogEnabled) {
-      if (progress.Level >= 100) {
+      if (progress.Level >= ProgressionService.GetMaxLevel()) {
         MessageService.SendInfo(player, $"+{FormatExperience(gainedExperience)} XP em {displayName}.");
       } else {
-        double levelPercent = GetLevelPercent(progress.Experience, progress.Level);
+        double levelPercent = ProgressionService.GetLevelPercent(progress.Experience, progress.Level);
         MessageService.SendInfo(player, $"+{FormatExperience(gainedExperience)} XP em {displayName} ({FormatPercent(levelPercent)}%).");
       }
     }
@@ -92,55 +91,51 @@ public static partial class ProfessionService {
   private static void HandleMinerRewards(PlayerData player, PrefabGUID yieldPrefab, int professionLevel, int extraAtMaxLevel) {
     int extraReward = CalculateScaledExtraBonus(professionLevel, extraAtMaxLevel);
     if (extraReward > 0) {
-      GiveReward(player, ProfessionType.Minerador, yieldPrefab, extraReward);
+      GiveReward(player, ProfessionsTypes.Minerador, yieldPrefab, extraReward);
     }
 
     if (RollChance(ProfessionSettingsService.MineradorGoldChanceAtMax * professionLevel / 100d)) {
-      GiveReward(player, ProfessionType.Minerador, PrefabGUIDs.Item_Ingredient_Mineral_GoldOre, ProfessionSettingsService.MineradorGoldAmount);
+      GiveReward(player, ProfessionsTypes.Minerador, PrefabGUIDs.Item_Ingredient_Mineral_GoldOre, ProfessionSettingsService.MineradorGoldAmount);
     }
   }
 
   private static void HandleWoodRewards(PlayerData player, PrefabGUID yieldPrefab, int professionLevel, int extraAtMaxLevel) {
     int extraReward = CalculateScaledExtraBonus(professionLevel, extraAtMaxLevel);
     if (extraReward > 0) {
-      GiveReward(player, ProfessionType.Lenhador, yieldPrefab, extraReward);
+      GiveReward(player, ProfessionsTypes.Lenhador, yieldPrefab, extraReward);
     }
 
-    if (!RollChance(ProfessionSettingsService.LenhadorSaplingChanceAtMax * professionLevel / 100d)) {
+    if (!RollChance(ProfessionSettingsService.LenhadorSpecialDropChanceAtMax * professionLevel / 100d)) {
       return;
     }
 
-    IReadOnlyList<PrefabGUID> treeSaplingRewards = ProfessionCatalogService.TreeSaplingRewards;
-    if (treeSaplingRewards.Count == 0) {
-      return;
+    if (RewardConfigService.TryGetRandomSaplingReward(professionLevel, out PrefabGUID rewardPrefab)) {
+      GiveReward(player, ProfessionsTypes.Lenhador, rewardPrefab, 1);
     }
-
-    PrefabGUID itemPrefab = treeSaplingRewards[Random.Next(0, treeSaplingRewards.Count)];
-    GiveReward(player, ProfessionType.Lenhador, itemPrefab, ProfessionSettingsService.LenhadorSaplingAmount);
   }
 
   private static void HandleHerbalRewards(PlayerData player, PrefabGUID yieldPrefab, int professionLevel, int extraAtMaxLevel) {
     int extraReward = CalculateScaledExtraBonus(professionLevel, extraAtMaxLevel);
     if (extraReward > 0) {
-      GiveReward(player, ProfessionType.Herbalista, yieldPrefab, extraReward);
+      GiveReward(player, ProfessionsTypes.Herbalista, yieldPrefab, extraReward);
     }
 
-    if (!RollChance(ProfessionSettingsService.HerbalistaSeedChanceAtMax * professionLevel / 100d)) {
+    if (!RollChance(ProfessionSettingsService.HerbalistaSpecialDropChanceAtMax * professionLevel / 100d)) {
       return;
     }
 
-    IReadOnlyList<PrefabGUID> plantSeedRewards = ProfessionCatalogService.PlantSeedRewards;
-    if (plantSeedRewards.Count == 0) {
-      return;
+    if (RewardConfigService.TryGetRandomSeedReward(professionLevel, out PrefabGUID rewardPrefab)) {
+      GiveReward(player, ProfessionsTypes.Herbalista, rewardPrefab, 1);
     }
-
-    PrefabGUID itemPrefab = plantSeedRewards[Random.Next(0, plantSeedRewards.Count)];
-    GiveReward(player, ProfessionType.Herbalista, itemPrefab, ProfessionSettingsService.HerbalistaSeedAmount);
   }
 
-  private static void HandleJewelGatherRewards(PlayerData player, PrefabGUID yieldPrefab, int professionLevel) {
-    if (RollChance(ProfessionSettingsService.JoalheiroPerfectGemChanceAtMax * professionLevel / 100d) && ProfessionCatalogService.TryGetPerfectGem(yieldPrefab, out PrefabGUID perfectGem)) {
-      GiveReward(player, ProfessionType.Joalheiro, perfectGem, ProfessionSettingsService.JoalheiroPerfectGemAmount);
+  private static void HandleJewelCraftRewards(PlayerData player, int professionLevel) {
+    if (!RollChance(ProfessionSettingsService.JoalheiroGemChanceAtMax * professionLevel / 100d)) {
+      return;
+    }
+
+    if (RewardConfigService.TryGetRandomGemReward(professionLevel, out PrefabGUID rewardPrefab)) {
+      GiveReward(player, ProfessionsTypes.Joalheiro, rewardPrefab, 1);
     }
   }
 
@@ -202,7 +197,7 @@ public static partial class ProfessionService {
     }
   }
 
-  private static void GiveReward(PlayerData player, ProfessionType profession, PrefabGUID itemPrefab, int amount) {
+  private static void GiveReward(PlayerData player, ProfessionsTypes profession, PrefabGUID itemPrefab, int amount) {
     if (player == null || !player.CharacterEntity.Exists() || amount <= 0) {
       return;
     }
@@ -221,50 +216,45 @@ public static partial class ProfessionService {
     }
   }
 
-  private static bool TryResolveGatherProfession(PrefabGUID yieldPrefab, out ProfessionType profession) {
-    profession = ProfessionType.Minerador;
-    if (ProfessionCatalogService.IsGemPrefab(yieldPrefab)) {
-      profession = ProfessionType.Joalheiro;
-      return true;
-    }
-
+  private static bool TryResolveGatherProfession(PrefabGUID yieldPrefab, out ProfessionsTypes profession) {
+    profession = ProfessionsTypes.Minerador;
     if (ProfessionCatalogService.IsOrePrefab(yieldPrefab)) {
-      profession = ProfessionType.Minerador;
+      profession = ProfessionsTypes.Minerador;
       return true;
     }
 
     if (ProfessionCatalogService.IsWoodPrefab(yieldPrefab)) {
-      profession = ProfessionType.Lenhador;
+      profession = ProfessionsTypes.Lenhador;
       return true;
     }
 
     if (ProfessionCatalogService.IsPlantPrefab(yieldPrefab)) {
-      profession = ProfessionType.Herbalista;
+      profession = ProfessionsTypes.Herbalista;
       return true;
     }
 
     return false;
   }
 
-  private static bool TryResolveCraftProfession(PrefabGUID itemPrefab, out ProfessionType profession) {
-    profession = ProfessionType.Minerador;
+  private static bool TryResolveCraftProfession(PrefabGUID itemPrefab, out ProfessionsTypes profession) {
+    profession = ProfessionsTypes.Minerador;
     if (ProfessionCatalogService.IsNecklacePrefab(itemPrefab)) {
-      profession = ProfessionType.Joalheiro;
+      profession = ProfessionsTypes.Joalheiro;
       return true;
     }
 
     if (ProfessionCatalogService.IsArmorPrefab(itemPrefab)) {
-      profession = ProfessionType.Alfaiate;
+      profession = ProfessionsTypes.Alfaiate;
       return true;
     }
 
     if (ProfessionCatalogService.IsWeaponPrefab(itemPrefab)) {
-      profession = ProfessionType.Ferreiro;
+      profession = ProfessionsTypes.Ferreiro;
       return true;
     }
 
     if (ProfessionCatalogService.IsConsumablePrefab(itemPrefab)) {
-      profession = ProfessionType.Alquimista;
+      profession = ProfessionsTypes.Alquimista;
       return true;
     }
 
@@ -293,8 +283,8 @@ public static partial class ProfessionService {
 
   private static bool IsConsumableBuff(PrefabGUID buffPrefab) {
     string buffName = ProfessionCatalogService.GetNormalizedPrefabName(buffPrefab);
-    if (!buffName.Contains("consumable") && !buffName.Contains("potion") && !buffName.Contains("elixir") && !buffName.Contains("coating") && !buffName.Contains("salve") && !buffName.Contains("brew")) {
-      return buffName.Contains("canteen");
+    if (!buffName.Contains("consumable", StringComparison.Ordinal) && !buffName.Contains("potion", StringComparison.Ordinal) && !buffName.Contains("elixir", StringComparison.Ordinal) && !buffName.Contains("coating", StringComparison.Ordinal) && !buffName.Contains("salve", StringComparison.Ordinal) && !buffName.Contains("brew", StringComparison.Ordinal)) {
+      return buffName.Contains("canteen", StringComparison.Ordinal);
     }
 
     return true;
@@ -321,25 +311,5 @@ public static partial class ProfessionService {
 
   private static int ToDisplayExperienceValue(double value) {
     return (int)Math.Max(1d, Math.Round(Math.Max(0d, value)));
-  }
-
-  private static double GetLevelPercent(double experience, int level) {
-    if (level >= 100) {
-      return 0d;
-    }
-
-    double currentLevelBase = ConvertLevelToXp(level);
-    double nextLevelBase = ConvertLevelToXp(level + 1);
-    double requiredExperience = Math.Max(1d, nextLevelBase - currentLevelBase);
-    double currentLevelProgress = Math.Clamp(experience - currentLevelBase, 0d, requiredExperience);
-    return Math.Round(Math.Min(99.999, currentLevelProgress / requiredExperience * 100d), 3);
-  }
-
-  private static int ConvertXpToLevel(double xp) {
-    return Math.Clamp((int)(0.1 * Math.Sqrt(Math.Max(0d, xp))), 1, 100);
-  }
-
-  private static double ConvertLevelToXp(int level) {
-    return Math.Pow(Math.Clamp(level, 1, 100) / 0.1, 2d);
   }
 }
