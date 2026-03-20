@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using CelemProfessions.Models;
 using ScarletCore.Resources;
 using Stunlock.Core;
@@ -6,14 +6,9 @@ using Stunlock.Core;
 namespace CelemProfessions.Service;
 
 public static class ProfessionSettingsService {
-  public const int MaxProfessionLevel = 100;
-
   public static void Configure() {
     Plugin.Settings.Section("Professions")
-      .Add("GatherBaseXp", 10.0, "EXP base para eventos de coleta de recursos.")
-      .Add("CraftBaseXp", 50.0, "EXP base para eventos de craft.")
       .Add("FishingBaseXp", 100.0, "EXP base por pescaria bem-sucedida.")
-      .Add("HunterBaseXp", 60.0, "EXP base por eliminacao de alvo com drop de couro.")
       .Add("ResetPassivesCostItem", PrefabGUIDs.Item_Ingredient_Bone.GuidHash, "PrefabGUID consumido no reset de passivas.")
       .Add("ResetPassivesCostAmount", 1, "Quantidade do item consumido no reset de passivas.")
       .Add("XpMultiplierMinerador", 1.0, "Multiplicador de XP do Minerador.")
@@ -46,13 +41,7 @@ public static class ProfessionSettingsService {
       .Add("PescadorExtraFishAmount", 1, "Quantidade de peixes extras por proc.");
   }
 
-  public static double GatherBaseXp => Math.Max(0d, Plugin.Settings.Get<double>("GatherBaseXp"));
-
-  public static double CraftBaseXp => Math.Max(0d, Plugin.Settings.Get<double>("CraftBaseXp"));
-
   public static double FishingBaseXp => Math.Max(0d, Plugin.Settings.Get<double>("FishingBaseXp"));
-
-  public static double HunterBaseXp => Math.Max(0d, Plugin.Settings.Get<double>("HunterBaseXp"));
 
   public static PrefabGUID ResetPassiveCostItem => new(Plugin.Settings.Get<int>("ResetPassivesCostItem"));
 
@@ -115,4 +104,3 @@ public static class ProfessionSettingsService {
     return Math.Clamp(value, 0d, 1d);
   }
 }
-

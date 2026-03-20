@@ -1,5 +1,4 @@
-using System;
-using System.Collections.Concurrent;
+﻿using System;
 using System.Collections.Generic;
 using ProjectM;
 using ProjectM.Network;
@@ -14,180 +13,158 @@ namespace CelemProfessions.Service;
 
 public static class CraftTrackingService {
   private const float CraftThreshold = 0.975f;
-  private const double CraftRateModifier = 1d;
 
-  private static readonly ConcurrentDictionary<ulong, Dictionary<Entity, Dictionary<PrefabGUID, int>>> PlayerCraftingJobs = [];
-  private static readonly ConcurrentDictionary<ulong, Dictionary<Entity, Dictionary<PrefabGUID, int>>> ValidatedCraftingJobs = [];
+  private static readonly Dictionary<ulong, Dictionary<Entity, Dictionary<PrefabGUID, int>>> PlayerCraftingJobs = [];
+  private static readonly Dictionary<Entity, Dictionary<PrefabGUID, List<ulong>>> ValidatedCraftingJobs = [];
   private static readonly Dictionary<Entity, bool> CraftFinished = [];
+  private static bool CraftRateReadErrorLogged;
 
   private static EntityManager EntityManager => GameSystems.EntityManager;
   private static NetworkIdSystem.Singleton NetworkIdSystem => GameSystems.NetworkIdSystem;
   private static PrefabCollectionSystem PrefabCollectionSystem => GameSystems.PrefabCollectionSystem;
 
-  public static void HandleStartCrafting(StartCraftingSystem system) {
+  public static void Shutdown() {
+    PlayerCraftingJobs.Clear();
+    ValidatedCraftingJobs.Clear();
+    CraftFinished.Clear();
+    CraftRateReadErrorLogged = false;
+  }
+
+  public static void HandleStartCrafting(NativeArray<Entity> entities) {
     if (!GameSystems.Initialized) {
       return;
     }
 
-    NativeArray<Entity> entities = system._StartCraftItemEventQuery.ToEntityArray(Allocator.Temp);
-
-    try {
-      foreach (Entity entity in entities) {
-        if (!entity.TryGetComponent(out StartCraftItemEvent startCraftEvent) || !entity.TryGetComponent(out FromCharacter fromCharacter)) {
-          continue;
-        }
-
-        Entity craftingStation = ResolveEntity(startCraftEvent.Workstation);
-        if (!craftingStation.Exists()) {
-          continue;
-        }
-
-        PrefabGUID recipeGuid = startCraftEvent.RecipeId;
-        Entity recipePrefab = ResolvePrefab(recipeGuid);
-        PrefabGUID outputItem = GetItemFromRecipePrefab(recipePrefab);
-        if (outputItem.IsEmpty()) {
-          continue;
-        }
-
-        ulong platformId = ResolvePlatformId(fromCharacter.User);
-        if (platformId == 0) {
-          continue;
-        }
-
-        Dictionary<Entity, Dictionary<PrefabGUID, int>> stationJobs = PlayerCraftingJobs.GetOrAdd(platformId, _ => []);
-
-        if (!stationJobs.TryGetValue(craftingStation, out Dictionary<PrefabGUID, int> recipeMap)) {
-          recipeMap = [];
-          stationJobs[craftingStation] = recipeMap;
-        }
-
-        recipeMap.TryGetValue(outputItem, out int currentJobs);
-        recipeMap[outputItem] = currentJobs + 1;
+    foreach (Entity entity in entities) {
+      if (!entity.TryGetComponent(out StartCraftItemEvent startCraftEvent) || !entity.TryGetComponent(out FromCharacter fromCharacter)) {
+        continue;
       }
-    } finally {
-      entities.Dispose();
+
+      Entity craftingStation = ResolveEntity(startCraftEvent.Workstation);
+      if (!craftingStation.Exists()) {
+        continue;
+      }
+
+      Entity recipePrefab = ResolvePrefab(startCraftEvent.RecipeId);
+      PrefabGUID outputItem = GetItemFromRecipePrefab(recipePrefab);
+      if (outputItem.IsEmpty()) {
+        continue;
+      }
+
+      ulong platformId = ResolvePlatformId(fromCharacter.User);
+      if (platformId == 0) {
+        continue;
+      }
+
+      if (!PlayerCraftingJobs.TryGetValue(platformId, out Dictionary<Entity, Dictionary<PrefabGUID, int>> stationJobs)) {
+        stationJobs = [];
+        PlayerCraftingJobs[platformId] = stationJobs;
+      }
+
+      if (!stationJobs.TryGetValue(craftingStation, out Dictionary<PrefabGUID, int> recipeMap)) {
+        recipeMap = [];
+        stationJobs[craftingStation] = recipeMap;
+      }
+
+      recipeMap.TryGetValue(outputItem, out int currentJobs);
+      recipeMap[outputItem] = currentJobs + 1;
     }
   }
 
-  public static void HandleStopCrafting(StopCraftingSystem system) {
+  public static void HandleStopCrafting(NativeArray<Entity> entities) {
     if (!GameSystems.Initialized) {
       return;
     }
 
-    NativeArray<Entity> entities = system._EventQuery.ToEntityArray(Allocator.Temp);
-
-    try {
-      foreach (Entity entity in entities) {
-        if (!entity.TryGetComponent(out StopCraftItemEvent stopCraftEvent) || !entity.TryGetComponent(out FromCharacter fromCharacter)) {
-          continue;
-        }
-
-        Entity craftingStation = ResolveEntity(stopCraftEvent.Workstation);
-        if (!craftingStation.Exists()) {
-          continue;
-        }
-
-        Entity recipePrefab = ResolvePrefab(stopCraftEvent.RecipeGuid);
-        PrefabGUID outputItem = GetItemFromRecipePrefab(recipePrefab);
-        if (outputItem.IsEmpty()) {
-          continue;
-        }
-
-        ulong platformId = ResolvePlatformId(fromCharacter.User);
-        if (platformId == 0) {
-          continue;
-        }
-
-        TryDecreaseValidatedJob(platformId, craftingStation, outputItem);
-        TryDecreasePendingJob(platformId, craftingStation, outputItem);
+    foreach (Entity entity in entities) {
+      if (!entity.TryGetComponent(out StopCraftItemEvent stopCraftEvent) || !entity.TryGetComponent(out FromCharacter fromCharacter)) {
+        continue;
       }
-    } finally {
-      entities.Dispose();
+
+      Entity craftingStation = ResolveEntity(stopCraftEvent.Workstation);
+      if (!craftingStation.Exists()) {
+        continue;
+      }
+
+      Entity recipePrefab = ResolvePrefab(stopCraftEvent.RecipeGuid);
+      PrefabGUID outputItem = GetItemFromRecipePrefab(recipePrefab);
+      if (outputItem.IsEmpty()) {
+        continue;
+      }
+
+      ulong platformId = ResolvePlatformId(fromCharacter.User);
+      if (platformId == 0) {
+        continue;
+      }
+
+      TryDecreaseValidatedJob(platformId, craftingStation, outputItem);
+      TryDecreasePendingJob(platformId, craftingStation, outputItem);
     }
   }
 
-  public static void HandleMoveItem(MoveItemBetweenInventoriesSystem system) {
+  public static void HandleMoveItem(NativeArray<Entity> entities) {
     if (!GameSystems.Initialized) {
       return;
     }
 
-    NativeArray<Entity> entities = system._MoveItemBetweenInventoriesEventQuery.ToEntityArray(Allocator.Temp);
-
-    try {
-      foreach (Entity entity in entities) {
-        if (!entity.TryGetComponent(out MoveItemBetweenInventoriesEvent moveEvent) || !entity.TryGetComponent(out FromCharacter fromCharacter)) {
-          continue;
-        }
-
-        Entity destination = ResolveEntity(moveEvent.ToInventory);
-        if (!destination.Exists() || !destination.Has<CastleWorkstation>()) {
-          continue;
-        }
-
-        ulong platformId = ResolvePlatformId(fromCharacter.Character);
-        if (platformId == 0) {
-          continue;
-        }
-
-        PrefabGUID movedItem = GetItemFromCharacterSlot(fromCharacter.Character, moveEvent.FromSlot);
-        if (movedItem.IsEmpty()) {
-          continue;
-        }
-
-        TryDecreasePendingJob(platformId, destination, movedItem);
-        TryDecreaseValidatedJob(platformId, destination, movedItem);
+    foreach (Entity entity in entities) {
+      if (!entity.TryGetComponent(out MoveItemBetweenInventoriesEvent moveEvent) || !entity.TryGetComponent(out FromCharacter fromCharacter)) {
+        continue;
       }
-    } finally {
-      entities.Dispose();
+
+      Entity destination = ResolveEntity(moveEvent.ToInventory);
+      if (!destination.Exists() || !destination.Has<CastleWorkstation>()) {
+        continue;
+      }
+
+      ulong platformId = ResolvePlatformId(fromCharacter.Character);
+      if (platformId == 0) {
+        continue;
+      }
+
+      PrefabGUID movedItem = GetItemFromCharacterSlot(fromCharacter.Character, moveEvent.FromSlot);
+      if (movedItem.IsEmpty()) {
+        continue;
+      }
+
+      TryDecreasePendingJob(platformId, destination, movedItem);
+      TryDecreaseValidatedJob(platformId, destination, movedItem);
     }
   }
 
-  public static void HandleUpdateCrafting(UpdateCraftingSystem system) {
+  public static void HandleUpdateCrafting(NativeArray<Entity> entities) {
     if (!GameSystems.Initialized) {
       return;
     }
 
-    NativeArray<Entity> entities = system.EntityQueries[0].ToEntityArray(Allocator.Temp);
-
-    try {
-      foreach (Entity entity in entities) {
-        if (!entity.Has<CastleWorkstation>() || !GameSystems.ServerGameManager.TryGetBuffer(entity, out DynamicBuffer<QueuedWorkstationCraftAction> queueBuffer) || queueBuffer.IsEmpty) {
-          continue;
-        }
-
-        if (!CraftFinished.ContainsKey(entity)) {
-          CraftFinished[entity] = false;
-        }
-
-        float recipeReduction = entity.Read<CastleWorkstation>().WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75f : 1f;
-        ProcessQueuedCraftAction(entity, queueBuffer[0], recipeReduction);
+    double craftRateModifier = GetCraftRateModifier();
+    for (int i = 0; i < entities.Length; i++) {
+      Entity entity = entities[i];
+      if (!entity.Has<CastleWorkstation>() || !GameSystems.ServerGameManager.TryGetBuffer(entity, out DynamicBuffer<QueuedWorkstationCraftAction> queueBuffer) || queueBuffer.IsEmpty) {
+        CraftFinished.Remove(entity);
+        continue;
       }
-    } finally {
-      entities.Dispose();
+
+      bool hasMatchingFloor = entity.Read<CastleWorkstation>().WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor);
+      float recipeReduction = hasMatchingFloor ? 0.75f : 1f;
+      ProcessQueuedCraftAction(entity, queueBuffer[0], recipeReduction, craftRateModifier);
     }
   }
 
-  public static void HandleUpdatePrison(UpdatePrisonSystem system) {
+  public static void HandleUpdatePrison(NativeArray<Entity> entities) {
     if (!GameSystems.Initialized) {
       return;
     }
 
-    NativeArray<Entity> entities = system.EntityQueries[0].ToEntityArray(Allocator.Temp);
-
-    try {
-      foreach (Entity entity in entities) {
-        if (!entity.Has<CastleWorkstation>() || !GameSystems.ServerGameManager.TryGetBuffer(entity, out DynamicBuffer<QueuedWorkstationCraftAction> queueBuffer) || queueBuffer.IsEmpty) {
-          continue;
-        }
-
-        if (!CraftFinished.ContainsKey(entity)) {
-          CraftFinished[entity] = false;
-        }
-
-        ProcessQueuedCraftAction(entity, queueBuffer[0], 1f);
+    double craftRateModifier = GetCraftRateModifier();
+    for (int i = 0; i < entities.Length; i++) {
+      Entity entity = entities[i];
+      if (!entity.Has<CastleWorkstation>() || !GameSystems.ServerGameManager.TryGetBuffer(entity, out DynamicBuffer<QueuedWorkstationCraftAction> queueBuffer) || queueBuffer.IsEmpty) {
+        CraftFinished.Remove(entity);
+        continue;
       }
-    } finally {
-      entities.Dispose();
+
+      ProcessQueuedCraftAction(entity, queueBuffer[0], 1f, craftRateModifier);
     }
   }
 
@@ -206,24 +183,14 @@ public static class CraftTrackingService {
       }
 
       Entity inventoryOwner = inventoryConnection.InventoryOwner;
-      if (!inventoryOwner.Exists()) {
+      if (!inventoryOwner.Exists() || changedEvent.ChangeType != InventoryChangedEventType.Obtained) {
         continue;
       }
 
-      if (changedEvent.ChangeType == InventoryChangedEventType.Removed && inventoryOwner.IsPlayer()) {
-        ulong ownerPlatformId = ResolvePlatformId(inventoryOwner);
-        if (ownerPlatformId != 0) {
-          ProfessionService.HandleConsumableRemoved(ownerPlatformId, changedEvent.InventoryEntity, changedEvent.ItemEntity, changedEvent.Item, changedEvent.Amount);
-        }
-
+      if (!inventoryOwner.TryGetComponent(out UserOwner _)) {
         continue;
       }
 
-      if (changedEvent.ChangeType != InventoryChangedEventType.Obtained || !inventoryOwner.TryGetComponent(out UserOwner userOwner) || !userOwner.Owner.GetEntityOnServer().TryGetComponent(out User user)) {
-        continue;
-      }
-
-      Entity station = inventoryOwner;
       PrefabGUID itemPrefab = changedEvent.Item;
       Entity itemEntity = changedEvent.ItemEntity;
 
@@ -232,50 +199,44 @@ public static class CraftTrackingService {
         itemPrefab = itemEntity.ReadBuffer<UpgradeableLegendaryItemTiers>()[tier].TierPrefab;
       }
 
-      Dictionary<ulong, User> candidates = ResolveCandidateCrafters(user);
-      foreach ((ulong platformId, User _) in candidates) {
-        if (!TryConsumeValidatedCraft(platformId, station, itemPrefab)) {
-          continue;
-        }
-
-        PlayerData candidatePlayer = null;
-        if (platformId.TryGetPlayerData(out PlayerData onlinePlayer)) {
-          candidatePlayer = onlinePlayer;
-        } else if (PlayerService.TryGetById(platformId, out PlayerData cachedPlayer)) {
-          candidatePlayer = cachedPlayer;
-        }
-
-        ProfessionService.HandleCraftedItem(platformId, candidatePlayer, station, itemEntity, itemPrefab, changedEvent.Amount);
-        break;
+      if (!IsTrackedCraftItem(itemPrefab)) {
+        continue;
       }
+
+      if (!TryConsumeValidatedCraft(inventoryOwner, itemPrefab, out ulong platformId)) {
+        continue;
+      }
+
+      if (!platformId.TryGetPlayerData(out PlayerData player) || player == null) {
+        continue;
+      }
+
+      ProfessionService.HandleCraftedItem(player, itemEntity, itemPrefab, changedEvent.Amount);
     }
   }
 
-  private static void ProcessQueuedCraftAction(Entity station, QueuedWorkstationCraftAction craftAction, float recipeReduction) {
+  private static void ProcessQueuedCraftAction(Entity station, QueuedWorkstationCraftAction craftAction, float recipeReduction, double craftRateModifier) {
     ulong platformId = ResolvePlatformId(craftAction.InitiateUser);
     if (platformId == 0) {
       return;
     }
 
-    bool craftFinished = CraftFinished[station];
+    bool craftFinished = CraftFinished.TryGetValue(station, out bool finished) && finished;
 
     Entity recipePrefab = ResolvePrefab(craftAction.RecipeGuid);
     PrefabGUID outputItem = GetItemFromRecipePrefab(recipePrefab);
-    if (outputItem.IsEmpty()) {
+    if (outputItem.IsEmpty() || !recipePrefab.TryGetComponent(out RecipeData recipeData)) {
       return;
     }
 
-    if (!recipePrefab.TryGetComponent(out RecipeData recipeData)) {
-      return;
-    }
-
-    double totalTime = (recipeData.CraftDuration * recipeReduction) / Math.Max(0.1d, CraftRateModifier);
+    double totalTime = (recipeData.CraftDuration * recipeReduction) / craftRateModifier;
     double craftProgress = craftAction.ProgressTime;
+    double ratio = craftProgress / Math.Max(0.001d, totalTime);
 
-    if (!craftFinished && (craftProgress / totalTime) >= CraftThreshold) {
+    if (!craftFinished && ratio >= CraftThreshold) {
       CraftFinished[station] = true;
       ValidateCraftingJob(platformId, station, outputItem);
-    } else if (craftFinished && (craftProgress / totalTime) < CraftThreshold) {
+    } else if (craftFinished && ratio < CraftThreshold) {
       CraftFinished[station] = false;
     }
   }
@@ -285,31 +246,35 @@ public static class CraftTrackingService {
       return;
     }
 
-    Dictionary<Entity, Dictionary<PrefabGUID, int>> validatedStations = ValidatedCraftingJobs.GetOrAdd(platformId, _ => []);
-    if (!validatedStations.TryGetValue(station, out Dictionary<PrefabGUID, int> validatedByItem)) {
+    if (!ValidatedCraftingJobs.TryGetValue(station, out Dictionary<PrefabGUID, List<ulong>> validatedByItem)) {
       validatedByItem = [];
-      validatedStations[station] = validatedByItem;
+      ValidatedCraftingJobs[station] = validatedByItem;
     }
 
-    validatedByItem.TryGetValue(itemPrefab, out int validatedCount);
-    validatedByItem[itemPrefab] = validatedCount + 1;
+    if (!validatedByItem.TryGetValue(itemPrefab, out List<ulong> validatedQueue)) {
+      validatedQueue = [];
+      validatedByItem[itemPrefab] = validatedQueue;
+    }
+
+    validatedQueue.Add(platformId);
 
     jobs[itemPrefab] = pending - 1;
     if (jobs[itemPrefab] <= 0) {
       jobs.Remove(itemPrefab);
     }
+
+    CleanupPendingPlatformState(platformId, station);
   }
 
-  private static bool TryConsumeValidatedCraft(ulong platformId, Entity station, PrefabGUID itemPrefab) {
-    if (!ValidatedCraftingJobs.TryGetValue(platformId, out Dictionary<Entity, Dictionary<PrefabGUID, int>> stationJobs) || !stationJobs.TryGetValue(station, out Dictionary<PrefabGUID, int> jobs) || !jobs.TryGetValue(itemPrefab, out int pending) || pending <= 0) {
+  private static bool TryConsumeValidatedCraft(Entity station, PrefabGUID itemPrefab, out ulong platformId) {
+    platformId = 0;
+    if (!ValidatedCraftingJobs.TryGetValue(station, out Dictionary<PrefabGUID, List<ulong>> validatedByItem) || !validatedByItem.TryGetValue(itemPrefab, out List<ulong> validatedQueue) || validatedQueue.Count == 0) {
       return false;
     }
 
-    jobs[itemPrefab] = pending - 1;
-    if (jobs[itemPrefab] <= 0) {
-      jobs.Remove(itemPrefab);
-    }
-
+    platformId = validatedQueue[0];
+    validatedQueue.RemoveAt(0);
+    CleanupValidatedStationState(station, itemPrefab);
     return true;
   }
 
@@ -322,16 +287,67 @@ public static class CraftTrackingService {
     if (jobs[itemPrefab] <= 0) {
       jobs.Remove(itemPrefab);
     }
+
+    CleanupPendingPlatformState(platformId, station);
   }
 
   private static void TryDecreaseValidatedJob(ulong platformId, Entity station, PrefabGUID itemPrefab) {
-    if (!ValidatedCraftingJobs.TryGetValue(platformId, out Dictionary<Entity, Dictionary<PrefabGUID, int>> stationJobs) || !stationJobs.TryGetValue(station, out Dictionary<PrefabGUID, int> jobs) || !jobs.TryGetValue(itemPrefab, out int pending) || pending <= 0) {
+    if (!ValidatedCraftingJobs.TryGetValue(station, out Dictionary<PrefabGUID, List<ulong>> validatedByItem) || !validatedByItem.TryGetValue(itemPrefab, out List<ulong> validatedQueue) || validatedQueue.Count == 0) {
       return;
     }
 
-    jobs[itemPrefab] = pending - 1;
-    if (jobs[itemPrefab] <= 0) {
-      jobs.Remove(itemPrefab);
+    int index = validatedQueue.IndexOf(platformId);
+    if (index < 0) {
+      return;
+    }
+
+    validatedQueue.RemoveAt(index);
+    CleanupValidatedStationState(station, itemPrefab);
+  }
+
+  private static void CleanupPendingPlatformState(ulong platformId, Entity station) {
+    if (!PlayerCraftingJobs.TryGetValue(platformId, out Dictionary<Entity, Dictionary<PrefabGUID, int>> stationJobs)) {
+      return;
+    }
+
+    if (stationJobs.TryGetValue(station, out Dictionary<PrefabGUID, int> jobs) && jobs.Count == 0) {
+      stationJobs.Remove(station);
+    }
+
+    if (stationJobs.Count == 0) {
+      PlayerCraftingJobs.Remove(platformId);
+    }
+  }
+
+  private static void CleanupValidatedStationState(Entity station, PrefabGUID itemPrefab) {
+    if (!ValidatedCraftingJobs.TryGetValue(station, out Dictionary<PrefabGUID, List<ulong>> validatedByItem)) {
+      return;
+    }
+
+    if (validatedByItem.TryGetValue(itemPrefab, out List<ulong> validatedQueue) && validatedQueue.Count == 0) {
+      validatedByItem.Remove(itemPrefab);
+    }
+
+    if (validatedByItem.Count == 0) {
+      ValidatedCraftingJobs.Remove(station);
+    }
+  }
+
+  private static double GetCraftRateModifier() {
+    try {
+      ServerGameSettingsSystem settingsSystem = GameSystems.Server.GetExistingSystemManaged<ServerGameSettingsSystem>();
+      if (settingsSystem == null) {
+        return 1d;
+      }
+
+      return Math.Max(0.1d, settingsSystem._Settings.CraftRateModifier);
+    } catch (Exception ex) {
+      if (!CraftRateReadErrorLogged) {
+        CraftRateReadErrorLogged = true;
+        Plugin.LogInstance?.LogWarning($"[ProfessionsCraft] Failed to read craft rate modifier: {ex.Message}");
+      }
+
+      return 1d;
     }
   }
 
@@ -360,31 +376,11 @@ public static class CraftTrackingService {
     return outputBuffer.IsEmpty ? PrefabGUID.Empty : outputBuffer[0].Guid;
   }
 
-  private static Dictionary<ulong, User> ResolveCandidateCrafters(User user) {
-    var candidates = new Dictionary<ulong, User>();
-
-    if (!user.ClanEntity.GetEntityOnServer().Exists()) {
-      candidates[user.PlatformId] = user;
-      return candidates;
-    }
-
-    Entity clan = user.ClanEntity.GetEntityOnServer();
-    if (!clan.TryGetBuffer(out DynamicBuffer<SyncToUserBuffer> clanUsers) || clanUsers.IsEmpty) {
-      candidates[user.PlatformId] = user;
-      return candidates;
-    }
-
-    foreach (SyncToUserBuffer syncToUser in clanUsers) {
-      if (syncToUser.UserEntity.TryGetComponent(out User clanUser)) {
-        candidates[clanUser.PlatformId] = clanUser;
-      }
-    }
-
-    if (!candidates.ContainsKey(user.PlatformId)) {
-      candidates[user.PlatformId] = user;
-    }
-
-    return candidates;
+  private static bool IsTrackedCraftItem(PrefabGUID itemPrefab) {
+    return ProfessionCatalogService.IsNecklacePrefab(itemPrefab)
+      || ProfessionCatalogService.IsArmorPrefab(itemPrefab)
+      || ProfessionCatalogService.IsWeaponPrefab(itemPrefab)
+      || ProfessionCatalogService.IsConsumablePrefab(itemPrefab);
   }
 
   private static ulong ResolvePlatformId(Entity entity) {
@@ -408,5 +404,4 @@ public static class CraftTrackingService {
     return 0;
   }
 }
-
 
