@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using CelemProfessions.Models;
 using ProjectM;
@@ -216,28 +216,13 @@ public static partial class ProfessionService {
     }
   }
 
-  private static bool TryResolveGatherProfession(PrefabGUID yieldPrefab, out ProfessionsTypes profession) {
-    profession = ProfessionsTypes.Minerador;
-    if (ProfessionCatalogService.IsOrePrefab(yieldPrefab)) {
-      profession = ProfessionsTypes.Minerador;
-      return true;
-    }
-
-    if (ProfessionCatalogService.IsWoodPrefab(yieldPrefab)) {
-      profession = ProfessionsTypes.Lenhador;
-      return true;
-    }
-
-    if (ProfessionCatalogService.IsPlantPrefab(yieldPrefab)) {
-      profession = ProfessionsTypes.Herbalista;
-      return true;
-    }
-
-    return false;
-  }
-
   private static bool TryResolveCraftProfession(PrefabGUID itemPrefab, out ProfessionsTypes profession) {
     profession = ProfessionsTypes.Minerador;
+    if (ProfessionExperienceConfigService.IsAlchemyCraftConfigured(itemPrefab)) {
+      profession = ProfessionsTypes.Alquimista;
+      return true;
+    }
+
     if (ProfessionCatalogService.IsNecklacePrefab(itemPrefab)) {
       profession = ProfessionsTypes.Joalheiro;
       return true;
@@ -250,11 +235,6 @@ public static partial class ProfessionService {
 
     if (ProfessionCatalogService.IsWeaponPrefab(itemPrefab)) {
       profession = ProfessionsTypes.Ferreiro;
-      return true;
-    }
-
-    if (ProfessionCatalogService.IsConsumablePrefab(itemPrefab)) {
-      profession = ProfessionsTypes.Alquimista;
       return true;
     }
 

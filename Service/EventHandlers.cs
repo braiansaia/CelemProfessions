@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using CelemProfessions.Events;
 using CelemProfessions.Models;
 using ProjectM;
@@ -20,9 +20,11 @@ public static partial class ProfessionService {
     }
 
     PrefabGUID yieldPrefab = yields[0].ItemType;
-    if (TryResolveGatherProfession(yieldPrefab, out ProfessionsTypes profession)) {
-      HandleGatherEvent(new GatherEventData(player, targetPrefab, yieldPrefab, profession));
+    if (!ProfessionExperienceConfigService.TryResolveGatherProfession(targetPrefab, out ProfessionsTypes profession)) {
+      return;
     }
+
+    HandleGatherEvent(new GatherEventData(player, targetPrefab, yieldPrefab, profession));
   }
 
   public static void HandleGatherEvent(in GatherEventData gatherEvent) {
@@ -70,7 +72,12 @@ public static partial class ProfessionService {
       return;
     }
 
-    AddExperience(fishingEvent.Player, ProfessionsTypes.Pescador, ProfessionSettingsService.FishingBaseXp, out ProfessionProgressData progress, out _, out _);
+    double fishingExperience = ProfessionSettingsService.FishingBaseXp;
+    if (ProfessionExperienceConfigService.TryGetFishingRegionExtraExperience(fishingEvent.FishingAreaPrefab, out double regionalExtraExperience)) {
+      fishingExperience += regionalExtraExperience;
+    }
+
+    AddExperience(fishingEvent.Player, ProfessionsTypes.Pescador, fishingExperience, out ProfessionProgressData progress, out _, out _);
     if (!RollChance(ProfessionSettingsService.PescadorFishChanceAtMax * progress.Level / 100d)) {
       return;
     }
@@ -140,7 +147,14 @@ public static partial class ProfessionService {
       return;
     }
 
-    AddExperience(player, profession, baseValue, out ProfessionProgressData progress, out _, out _);
+    double experienceToAdd = profession == ProfessionsTypes.Alquimista
+      ? Math.Max(0d, baseValue) * amount
+      : baseValue;
+    if (experienceToAdd <= 0d) {
+      return;
+    }
+
+    AddExperience(player, profession, experienceToAdd, out ProfessionProgressData progress, out _, out _);
     switch (profession) {
       case ProfessionsTypes.Joalheiro:
         ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.JoalheiroDurabilityBonusAtMax);

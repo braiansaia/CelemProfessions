@@ -147,6 +147,51 @@ public static class ProfessionCatalogService {
       || name.Contains("gruel", StringComparison.Ordinal);
   }
 
+  public static bool TryResolveFishingRegion(Stunlock.Core.PrefabGUID fishingAreaPrefab, out string region) {
+    region = string.Empty;
+    string name = GetNormalizedPrefabName(fishingAreaPrefab);
+    if (string.IsNullOrEmpty(name)) {
+      return false;
+    }
+
+    if (name.Contains("farbane", StringComparison.Ordinal)) {
+      region = "farbane";
+      return true;
+    }
+
+    if (name.Contains("dunley", StringComparison.Ordinal)) {
+      region = "dunley";
+      return true;
+    }
+
+    if (name.Contains("gloomrot", StringComparison.Ordinal)) {
+      region = "gloomrot";
+      return true;
+    }
+
+    if (name.Contains("cursed", StringComparison.Ordinal)) {
+      region = "cursed";
+      return true;
+    }
+
+    if (name.Contains("silverlight", StringComparison.Ordinal)) {
+      region = "silverlight";
+      return true;
+    }
+
+    if (name.Contains("strongblade", StringComparison.Ordinal)) {
+      region = "strongblade";
+      return true;
+    }
+
+    if (name.Contains("mortium", StringComparison.Ordinal)) {
+      region = "mortium";
+      return true;
+    }
+
+    return false;
+  }
+
   internal static string GetNormalizedPrefabName(Stunlock.Core.PrefabGUID prefab) {
     int key = prefab.GuidHash;
     if (key == 0) {
