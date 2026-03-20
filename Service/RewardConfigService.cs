@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -69,8 +69,7 @@ public static class RewardConfigService {
 
   public static bool TryGetRandomFishingReward(PrefabGUID fishingAreaPrefab, int professionLevel, out PrefabGUID rewardPrefab) {
     rewardPrefab = PrefabGUID.Empty;
-    string region = ResolveFishingRegion(fishingAreaPrefab);
-    if (string.IsNullOrEmpty(region)) {
+    if (!ProfessionCatalogService.TryResolveFishingRegion(fishingAreaPrefab, out string region)) {
       return false;
     }
 
@@ -237,43 +236,6 @@ public static class RewardConfigService {
       Level = 1,
       Enabled = true
     };
-  }
-
-  private static string ResolveFishingRegion(PrefabGUID fishingAreaPrefab) {
-    string name = ProfessionCatalogService.GetNormalizedPrefabName(fishingAreaPrefab);
-    if (string.IsNullOrEmpty(name)) {
-      return string.Empty;
-    }
-
-    if (name.Contains("farbane", StringComparison.Ordinal)) {
-      return "farbane";
-    }
-
-    if (name.Contains("dunley", StringComparison.Ordinal)) {
-      return "dunley";
-    }
-
-    if (name.Contains("gloomrot", StringComparison.Ordinal)) {
-      return "gloomrot";
-    }
-
-    if (name.Contains("cursed", StringComparison.Ordinal)) {
-      return "cursed";
-    }
-
-    if (name.Contains("silverlight", StringComparison.Ordinal)) {
-      return "silverlight";
-    }
-
-    if (name.Contains("strongblade", StringComparison.Ordinal)) {
-      return "strongblade";
-    }
-
-    if (name.Contains("mortium", StringComparison.Ordinal)) {
-      return "mortium";
-    }
-
-    return string.Empty;
   }
 
   private static string NormalizeRegion(string region) {

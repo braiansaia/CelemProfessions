@@ -13,3 +13,9 @@ public sealed class ExperienceEntry {
   public bool Enabled { get; set; } = true;
 }
 
+
+public sealed class FishingRegionExperienceEntry {
+  public string Region { get; set; } = string.Empty;
+  public double EXP { get; set; }
+  public bool Enabled { get; set; } = true;
+}

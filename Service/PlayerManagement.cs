@@ -12,7 +12,6 @@ public static partial class ProfessionService {
       return;
     }
 
-    ProgressionService.Initialize();
     PlayerCache.Clear();
     foreach (KeyValuePair<string, PlayerProfessionsData> item in Plugin.Database.GetAllByPrefix<PlayerProfessionsData>("professions/players/")) {
       PlayerProfessionsData value = item.Value;

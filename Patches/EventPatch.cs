@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using CelemProfessions.Events;
 using CelemProfessions.Service;
 using ProjectM;
@@ -11,6 +12,8 @@ using Unity.Entities;
 namespace CelemProfessions.Patches;
 
 public static class EventPatch {
+  private static readonly Dictionary<string, DateTime> NextErrorLogByKey = [];
+  private static readonly TimeSpan ErrorLogCooldown = TimeSpan.FromSeconds(10);
   public static void Initialize() {
     EventManager.On(PlayerEvents.PlayerJoined, HandlePlayerJoined);
     EventManager.On(PostfixEvents.OnDeath, HandleDeathEvents);
@@ -44,7 +47,7 @@ public static class EventPatch {
         ProfessionService.HandleGatherFromEntity(killer, target, targetPrefab);
         ProfessionService.HandleHunterKillEvent(new HunterKillEventData(killer, target, targetPrefab));
       } catch (Exception ex) {
-        Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch death error: {ex.Message}");
+        LogThrottled("death", "ProfessionsEventPatch death error", ex);
       }
     }
   }
@@ -53,7 +56,7 @@ public static class EventPatch {
     try {
       CraftTrackingService.HandleInventoryChanged(entities);
     } catch (Exception ex) {
-      Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch inventory error: {ex.Message}");
+      LogThrottled("inventory", "ProfessionsEventPatch inventory error", ex);
     }
   }
 
@@ -61,7 +64,7 @@ public static class EventPatch {
     try {
       CraftTrackingService.HandleMoveItem(entities);
     } catch (Exception ex) {
-      Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch move item error: {ex.Message}");
+      LogThrottled("move", "ProfessionsEventPatch move item error", ex);
     }
   }
 
@@ -69,7 +72,7 @@ public static class EventPatch {
     try {
       CraftTrackingService.HandleStartCrafting(entities);
     } catch (Exception ex) {
-      Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch start crafting error: {ex.Message}");
+      LogThrottled("start", "ProfessionsEventPatch start crafting error", ex);
     }
   }
 
@@ -77,7 +80,7 @@ public static class EventPatch {
     try {
       CraftTrackingService.HandleStopCrafting(entities);
     } catch (Exception ex) {
-      Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch stop crafting error: {ex.Message}");
+      LogThrottled("stop", "ProfessionsEventPatch stop crafting error", ex);
     }
   }
 
@@ -85,7 +88,7 @@ public static class EventPatch {
     try {
       CraftTrackingService.HandleUpdateCrafting(entities);
     } catch (Exception ex) {
-      Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch update crafting error: {ex.Message}");
+      LogThrottled("update", "ProfessionsEventPatch update crafting error", ex);
     }
   }
 
@@ -94,7 +97,7 @@ public static class EventPatch {
       try {
         ProfessionService.HandleFishingGameplayEvent(entities[i]);
       } catch (Exception ex) {
-        Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch gameplay destroy error: {ex.Message}");
+        LogThrottled("gameplay", "ProfessionsEventPatch gameplay destroy error", ex);
       }
     }
   }
@@ -104,8 +107,18 @@ public static class EventPatch {
       try {
         ProfessionService.HandleBuffSpawn(entities[i]);
       } catch (Exception ex) {
-        Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch buff spawn error: {ex.Message}");
+        LogThrottled("buff", "ProfessionsEventPatch buff spawn error", ex);
       }
     }
+  }
+
+  private static void LogThrottled(string key, string message, Exception ex) {
+    DateTime now = DateTime.UtcNow;
+    if (NextErrorLogByKey.TryGetValue(key, out DateTime nextAllowedAt) && nextAllowedAt > now) {
+      return;
+    }
+
+    NextErrorLogByKey[key] = now + ErrorLogCooldown;
+    Plugin.LogInstance?.LogWarning($"[CelemProfessions] {message}: {ex.Message}");
   }
 }

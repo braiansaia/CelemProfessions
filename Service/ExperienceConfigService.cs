@@ -45,6 +45,9 @@ public static class ProfessionExperienceConfigService {
   private static readonly Dictionary<int, int> CacadorExtraAtMaxByTarget = [];
   private static readonly Dictionary<int, PrefabGUID> CacadorLeatherDropByTarget = [];
 
+  private static readonly Dictionary<string, double> PescadorRegionExtraExperienceByRegion = new(StringComparer.Ordinal);
+
+  private static readonly string[] FishingRegions = ["Farbane", "Dunley", "Gloomrot", "Cursed", "Silverlight", "Strongblade", "Mortium"];
   private static bool _initialized;
 
   private static string ConfigDirectory => Path.Combine(Paths.ConfigPath, "CelemProfessions");
@@ -53,6 +56,7 @@ public static class ProfessionExperienceConfigService {
   private static string HerbalistaFilePath => Path.Combine(ConfigDirectory, "herbalista.json");
   private static string AlquimistaFilePath => Path.Combine(ConfigDirectory, "alquimista.json");
   private static string CacadorFilePath => Path.Combine(ConfigDirectory, "cacador.json");
+  private static string PescadorRegionFilePath => Path.Combine(ConfigDirectory, "pescador_regioes_xp.json");
 
   public static void Initialize() {
     if (_initialized) {
@@ -66,6 +70,7 @@ public static class ProfessionExperienceConfigService {
     bool needsHerbalistaConfig = ShouldGenerateGatherConfig(HerbalistaFilePath);
     bool needsAlquimistaConfig = !File.Exists(AlquimistaFilePath);
     bool needsCacadorConfig = !File.Exists(CacadorFilePath);
+    bool needsPescadorRegionConfig = ShouldGenerateFishingRegionConfig(PescadorRegionFilePath);
 
     List<GatherSnapshot> gatherSnapshots = [];
     if (needsMineradorConfig || needsLenhadorConfig || needsHerbalistaConfig) {
@@ -97,11 +102,17 @@ public static class ProfessionExperienceConfigService {
       WriteConfigFile(CacadorFilePath, BuildCacadorEntries(prefabSnapshots), false);
     }
 
+    if (needsPescadorRegionConfig) {
+      WriteFishingRegionConfigFile(PescadorRegionFilePath, BuildFishingRegionEntries());
+    }
+
     LoadEnabledEntries(MineradorFilePath, MineradorGatherExperienceByTarget, MineradorExtraAtMaxByTarget, true);
     LoadEnabledEntries(LenhadorFilePath, LenhadorGatherExperienceByTarget, LenhadorExtraAtMaxByTarget, true);
     LoadEnabledEntries(HerbalistaFilePath, HerbalistaGatherExperienceByTarget, HerbalistaExtraAtMaxByTarget, true);
     LoadEnabledEntries(AlquimistaFilePath, AlquimistaCraftExperienceByItem, null, false);
     LoadEnabledEntries(CacadorFilePath, CacadorExperienceByTarget, CacadorExtraAtMaxByTarget, true);
+    NormalizeFishingRegionConfigFile(PescadorRegionFilePath);
+    LoadFishingRegionEntries(PescadorRegionFilePath);
 
     BuildHunterLeatherLookup();
     _initialized = true;
@@ -118,6 +129,7 @@ public static class ProfessionExperienceConfigService {
     CacadorExperienceByTarget.Clear();
     CacadorExtraAtMaxByTarget.Clear();
     CacadorLeatherDropByTarget.Clear();
+    PescadorRegionExtraExperienceByRegion.Clear();
     _initialized = false;
   }
 
@@ -147,6 +159,40 @@ public static class ProfessionExperienceConfigService {
     }
 
     return CacadorLeatherDropByTarget.TryGetValue(key, out leatherDrop);
+  }
+
+  public static bool IsAlchemyCraftConfigured(PrefabGUID itemPrefab) {
+    return AlquimistaCraftExperienceByItem.ContainsKey(itemPrefab.GuidHash);
+  }
+
+  public static bool TryResolveGatherProfession(PrefabGUID targetPrefab, out ProfessionsTypes profession) {
+    int key = targetPrefab.GuidHash;
+    if (MineradorGatherExperienceByTarget.ContainsKey(key)) {
+      profession = ProfessionsTypes.Minerador;
+      return true;
+    }
+
+    if (LenhadorGatherExperienceByTarget.ContainsKey(key)) {
+      profession = ProfessionsTypes.Lenhador;
+      return true;
+    }
+
+    if (HerbalistaGatherExperienceByTarget.ContainsKey(key)) {
+      profession = ProfessionsTypes.Herbalista;
+      return true;
+    }
+
+    profession = default;
+    return false;
+  }
+
+  public static bool TryGetFishingRegionExtraExperience(PrefabGUID fishingAreaPrefab, out double extraExperience) {
+    extraExperience = 0d;
+    if (!ProfessionCatalogService.TryResolveFishingRegion(fishingAreaPrefab, out string region)) {
+      return false;
+    }
+
+    return PescadorRegionExtraExperienceByRegion.TryGetValue(region, out extraExperience);
   }
 
   private static List<PrefabSnapshot> BuildPrefabSnapshots() {
@@ -277,6 +323,145 @@ public static class ProfessionExperienceConfigService {
     }
 
     return entries.Values.OrderBy(x => x.Name, StringComparer.Ordinal).ToList();
+  }
+
+  private static List<FishingRegionExperienceEntry> BuildFishingRegionEntries() {
+    List<FishingRegionExperienceEntry> entries = new(FishingRegions.Length);
+    for (int i = 0; i < FishingRegions.Length; i++) {
+      string region = FishingRegions[i];
+      entries.Add(new FishingRegionExperienceEntry {
+        Region = region,
+        EXP = 0d,
+        Enabled = true
+      });
+    }
+
+    return entries;
+  }
+
+  private static void NormalizeFishingRegionConfigFile(string path) {
+    if (!File.Exists(path)) {
+      return;
+    }
+
+    try {
+      string json = File.ReadAllText(path);
+      if (string.IsNullOrWhiteSpace(json)) {
+        return;
+      }
+
+      List<FishingRegionExperienceEntry> currentEntries = JsonSerializer.Deserialize<List<FishingRegionExperienceEntry>>(json) ?? [];
+      List<FishingRegionExperienceEntry> normalizedEntries = BuildNormalizedFishingRegionEntries(currentEntries);
+      if (IsNormalizedFishingRegionConfig(currentEntries, normalizedEntries)) {
+        return;
+      }
+
+      WriteFishingRegionConfigFile(path, normalizedEntries);
+      Plugin.LogInstance?.LogInfo($"[ProfessionsXPConfig] Arquivo regional de pescador normalizado em '{path}'.");
+    } catch (Exception ex) {
+      Plugin.LogInstance?.LogWarning($"[ProfessionsXPConfig] Failed to normalize '{Path.GetFileName(path)}': {ex.Message}");
+    }
+  }
+
+  private static List<FishingRegionExperienceEntry> BuildNormalizedFishingRegionEntries(List<FishingRegionExperienceEntry> entries) {
+    Dictionary<string, FishingRegionExperienceEntry> entriesByRegion = new(StringComparer.Ordinal);
+    for (int i = 0; i < entries.Count; i++) {
+      FishingRegionExperienceEntry entry = entries[i];
+      if (entry == null || string.IsNullOrWhiteSpace(entry.Region)) {
+        continue;
+      }
+
+      string normalizedRegion = NormalizeRegion(entry.Region);
+      if (string.IsNullOrEmpty(normalizedRegion)) {
+        continue;
+      }
+
+      entriesByRegion[normalizedRegion] = entry;
+    }
+
+    List<FishingRegionExperienceEntry> normalizedEntries = new(FishingRegions.Length);
+    for (int i = 0; i < FishingRegions.Length; i++) {
+      string canonicalRegion = FishingRegions[i];
+      string normalizedRegion = NormalizeRegion(canonicalRegion);
+      if (entriesByRegion.TryGetValue(normalizedRegion, out FishingRegionExperienceEntry existingEntry)) {
+        normalizedEntries.Add(new FishingRegionExperienceEntry {
+          Region = canonicalRegion,
+          EXP = Math.Max(0d, Math.Floor(existingEntry.EXP)),
+          Enabled = existingEntry.Enabled
+        });
+        continue;
+      }
+
+      normalizedEntries.Add(new FishingRegionExperienceEntry {
+        Region = canonicalRegion,
+        EXP = 0d,
+        Enabled = true
+      });
+    }
+
+    return normalizedEntries;
+  }
+
+  private static bool IsNormalizedFishingRegionConfig(List<FishingRegionExperienceEntry> currentEntries, List<FishingRegionExperienceEntry> normalizedEntries) {
+    if (currentEntries.Count != normalizedEntries.Count) {
+      return false;
+    }
+
+    for (int i = 0; i < normalizedEntries.Count; i++) {
+      FishingRegionExperienceEntry currentEntry = currentEntries[i];
+      FishingRegionExperienceEntry normalizedEntry = normalizedEntries[i];
+      if (currentEntry == null) {
+        return false;
+      }
+
+      string currentRegion = currentEntry.Region?.Trim() ?? string.Empty;
+      double currentExp = Math.Max(0d, Math.Floor(currentEntry.EXP));
+      if (!string.Equals(currentRegion, normalizedEntry.Region, StringComparison.Ordinal)
+          || currentExp != normalizedEntry.EXP
+          || currentEntry.Enabled != normalizedEntry.Enabled) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private static void LoadFishingRegionEntries(string path) {
+    PescadorRegionExtraExperienceByRegion.Clear();
+    if (!File.Exists(path)) {
+      return;
+    }
+
+    try {
+      string json = File.ReadAllText(path);
+      if (string.IsNullOrWhiteSpace(json)) {
+        return;
+      }
+
+      List<FishingRegionExperienceEntry> entries = JsonSerializer.Deserialize<List<FishingRegionExperienceEntry>>(json) ?? [];
+      for (int i = 0; i < entries.Count; i++) {
+        FishingRegionExperienceEntry entry = entries[i];
+        if (entry == null || !entry.Enabled || string.IsNullOrWhiteSpace(entry.Region)) {
+          continue;
+        }
+
+        string normalizedRegion = NormalizeRegion(entry.Region);
+        if (string.IsNullOrEmpty(normalizedRegion)) {
+          continue;
+        }
+
+        double extraExperience = Math.Max(0d, Math.Floor(entry.EXP));
+        PescadorRegionExtraExperienceByRegion[normalizedRegion] = extraExperience;
+      }
+    } catch (Exception ex) {
+      Plugin.LogInstance?.LogWarning($"[ProfessionsXPConfig] Failed to parse '{Path.GetFileName(path)}': {ex.Message}");
+    }
+  }
+
+  private static void WriteFishingRegionConfigFile(string path, List<FishingRegionExperienceEntry> entries) {
+    string json = JsonSerializer.Serialize(entries, JsonOptions);
+    File.WriteAllText(path, json);
+    Plugin.LogInstance?.LogInfo($"[ProfessionsXPConfig] Arquivo criado em '{path}'.");
   }
 
   private static void BuildHunterLeatherLookup() {
@@ -497,6 +682,16 @@ public static class ProfessionExperienceConfigService {
 
   private static bool ShouldGenerateGatherConfig(string path) {
     return !File.Exists(path) || IsBrokenEmptyConfig(path);
+  }
+
+  private static bool ShouldGenerateFishingRegionConfig(string path) {
+    return !File.Exists(path) || IsBrokenEmptyConfig(path);
+  }
+
+  private static string NormalizeRegion(string region) {
+    return string.IsNullOrWhiteSpace(region)
+      ? string.Empty
+      : region.Trim().ToLowerInvariant();
   }
 
   private static bool IsBrokenEmptyConfig(string path) {
