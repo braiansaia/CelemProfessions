@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,7 +7,6 @@ using BepInEx;
 using CelemProfessions.Models;
 using ProjectM;
 using ProjectM.Shared;
-using ScarletCore.Resources;
 using ScarletCore.Systems;
 using Stunlock.Core;
 using Unity.Collections;
@@ -41,8 +40,6 @@ public static class ProfessionExperienceConfigService {
   private static readonly Dictionary<int, int> LenhadorExtraAtMaxByTarget = [];
   private static readonly Dictionary<int, double> HerbalistaGatherExperienceByTarget = [];
   private static readonly Dictionary<int, int> HerbalistaExtraAtMaxByTarget = [];
-  private static readonly Dictionary<int, double> JoalheiroGatherExperienceByTarget = [];
-  private static readonly Dictionary<int, int> JoalheiroExtraAtMaxByTarget = [];
   private static readonly Dictionary<int, double> AlquimistaCraftExperienceByItem = [];
   private static readonly Dictionary<int, double> CacadorExperienceByTarget = [];
   private static readonly Dictionary<int, int> CacadorExtraAtMaxByTarget = [];
@@ -54,7 +51,6 @@ public static class ProfessionExperienceConfigService {
   private static string MineradorFilePath => Path.Combine(ConfigDirectory, "minerador.json");
   private static string LenhadorFilePath => Path.Combine(ConfigDirectory, "lenhador.json");
   private static string HerbalistaFilePath => Path.Combine(ConfigDirectory, "herbalista.json");
-  private static string JoalheiroFilePath => Path.Combine(ConfigDirectory, "joalheiro.json");
   private static string AlquimistaFilePath => Path.Combine(ConfigDirectory, "alquimista.json");
   private static string CacadorFilePath => Path.Combine(ConfigDirectory, "cacador.json");
 
@@ -63,37 +59,52 @@ public static class ProfessionExperienceConfigService {
       return;
     }
 
-    LogConfig("Initialize start");
     Directory.CreateDirectory(ConfigDirectory);
 
-    List<GatherSnapshot> gatherSnapshots = BuildGatherSnapshots();
-    List<PrefabSnapshot> snapshots = BuildPrefabSnapshots();
+    bool needsMineradorConfig = ShouldGenerateGatherConfig(MineradorFilePath);
+    bool needsLenhadorConfig = ShouldGenerateGatherConfig(LenhadorFilePath);
+    bool needsHerbalistaConfig = ShouldGenerateGatherConfig(HerbalistaFilePath);
+    bool needsAlquimistaConfig = !File.Exists(AlquimistaFilePath);
+    bool needsCacadorConfig = !File.Exists(CacadorFilePath);
 
-    List<ProfessionExperienceEntry> mineradorEntries = BuildGatherEntries(gatherSnapshots, ProfessionType.Minerador);
-    List<ProfessionExperienceEntry> lenhadorEntries = BuildGatherEntries(gatherSnapshots, ProfessionType.Lenhador);
-    List<ProfessionExperienceEntry> herbalistaEntries = BuildGatherEntries(gatherSnapshots, ProfessionType.Herbalista);
-    List<ProfessionExperienceEntry> joalheiroEntries = BuildGatherEntries(gatherSnapshots, ProfessionType.Joalheiro);
-    List<ProfessionExperienceEntry> alquimistaEntries = BuildAlquimistaEntries(snapshots);
-    List<ProfessionExperienceEntry> cacadorEntries = BuildCacadorEntries(snapshots);
+    List<GatherSnapshot> gatherSnapshots = [];
+    if (needsMineradorConfig || needsLenhadorConfig || needsHerbalistaConfig) {
+      gatherSnapshots = BuildGatherSnapshots();
+    }
 
-    EnsureConfigFile(MineradorFilePath, mineradorEntries);
-    EnsureConfigFile(LenhadorFilePath, lenhadorEntries);
-    EnsureConfigFile(HerbalistaFilePath, herbalistaEntries);
-    EnsureConfigFile(JoalheiroFilePath, joalheiroEntries);
-    EnsureConfigFile(AlquimistaFilePath, alquimistaEntries);
-    EnsureConfigFile(CacadorFilePath, cacadorEntries);
+    List<PrefabSnapshot> prefabSnapshots = [];
+    if (needsAlquimistaConfig || needsCacadorConfig) {
+      prefabSnapshots = BuildPrefabSnapshots();
+    }
+
+    if (needsMineradorConfig) {
+      WriteConfigFile(MineradorFilePath, BuildGatherEntries(gatherSnapshots, ProfessionsTypes.Minerador), File.Exists(MineradorFilePath));
+    }
+
+    if (needsLenhadorConfig) {
+      WriteConfigFile(LenhadorFilePath, BuildGatherEntries(gatherSnapshots, ProfessionsTypes.Lenhador), File.Exists(LenhadorFilePath));
+    }
+
+    if (needsHerbalistaConfig) {
+      WriteConfigFile(HerbalistaFilePath, BuildGatherEntries(gatherSnapshots, ProfessionsTypes.Herbalista), File.Exists(HerbalistaFilePath));
+    }
+
+    if (needsAlquimistaConfig) {
+      WriteConfigFile(AlquimistaFilePath, BuildAlquimistaEntries(prefabSnapshots), false);
+    }
+
+    if (needsCacadorConfig) {
+      WriteConfigFile(CacadorFilePath, BuildCacadorEntries(prefabSnapshots), false);
+    }
 
     LoadEnabledEntries(MineradorFilePath, MineradorGatherExperienceByTarget, MineradorExtraAtMaxByTarget, true);
     LoadEnabledEntries(LenhadorFilePath, LenhadorGatherExperienceByTarget, LenhadorExtraAtMaxByTarget, true);
     LoadEnabledEntries(HerbalistaFilePath, HerbalistaGatherExperienceByTarget, HerbalistaExtraAtMaxByTarget, true);
-    LoadEnabledEntries(JoalheiroFilePath, JoalheiroGatherExperienceByTarget, JoalheiroExtraAtMaxByTarget, false);
     LoadEnabledEntries(AlquimistaFilePath, AlquimistaCraftExperienceByItem, null, false);
     LoadEnabledEntries(CacadorFilePath, CacadorExperienceByTarget, CacadorExtraAtMaxByTarget, true);
 
-    BuildHunterLeatherLookup(snapshots);
-
+    BuildHunterLeatherLookup();
     _initialized = true;
-    LogConfig("Initialize completed");
   }
 
   public static void Shutdown() {
@@ -103,8 +114,6 @@ public static class ProfessionExperienceConfigService {
     LenhadorExtraAtMaxByTarget.Clear();
     HerbalistaGatherExperienceByTarget.Clear();
     HerbalistaExtraAtMaxByTarget.Clear();
-    JoalheiroGatherExperienceByTarget.Clear();
-    JoalheiroExtraAtMaxByTarget.Clear();
     AlquimistaCraftExperienceByItem.Clear();
     CacadorExperienceByTarget.Clear();
     CacadorExtraAtMaxByTarget.Clear();
@@ -112,16 +121,15 @@ public static class ProfessionExperienceConfigService {
     _initialized = false;
   }
 
-  public static bool TryGetGatherConfiguration(ProfessionType profession, PrefabGUID targetPrefab, out double experience, out int extraAtMaxLevel) {
+  public static bool TryGetGatherConfiguration(ProfessionsTypes profession, PrefabGUID targetPrefab, out double experience, out int extraAtMaxLevel) {
     experience = 0d;
     extraAtMaxLevel = 0;
     int key = targetPrefab.GuidHash;
 
     return profession switch {
-      ProfessionType.Minerador => TryGetConfiguration(MineradorGatherExperienceByTarget, MineradorExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel),
-      ProfessionType.Lenhador => TryGetConfiguration(LenhadorGatherExperienceByTarget, LenhadorExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel),
-      ProfessionType.Herbalista => TryGetConfiguration(HerbalistaGatherExperienceByTarget, HerbalistaExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel),
-      ProfessionType.Joalheiro => TryGetConfiguration(JoalheiroGatherExperienceByTarget, JoalheiroExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel),
+      ProfessionsTypes.Minerador => TryGetConfiguration(MineradorGatherExperienceByTarget, MineradorExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel),
+      ProfessionsTypes.Lenhador => TryGetConfiguration(LenhadorGatherExperienceByTarget, LenhadorExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel),
+      ProfessionsTypes.Herbalista => TryGetConfiguration(HerbalistaGatherExperienceByTarget, HerbalistaExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel),
       _ => false
     };
   }
@@ -134,7 +142,6 @@ public static class ProfessionExperienceConfigService {
     leatherDrop = PrefabGUID.Empty;
     extraAtMaxLevel = 0;
     int key = targetPrefab.GuidHash;
-
     if (!TryGetConfiguration(CacadorExperienceByTarget, CacadorExtraAtMaxByTarget, key, out experience, out extraAtMaxLevel)) {
       return false;
     }
@@ -143,39 +150,22 @@ public static class ProfessionExperienceConfigService {
   }
 
   private static List<PrefabSnapshot> BuildPrefabSnapshots() {
-    EntityQueryBuilder queryBuilder = new(Allocator.Temp);
-    queryBuilder.AddAll(ComponentType.ReadOnly<Prefab>());
-    queryBuilder.AddAll(ComponentType.ReadOnly<PrefabGUID>());
-    queryBuilder.WithOptions(EntityQueryOptions.IncludeDisabled | EntityQueryOptions.IncludePrefab);
-
-    EntityQuery query = GameSystems.EntityManager.CreateEntityQuery(ref queryBuilder);
     Dictionary<int, PrefabSnapshot> snapshots = new();
-
-    try {
-      NativeArray<Entity> entities = query.ToEntityArray(Allocator.Temp);
-      try {
-        for (int i = 0; i < entities.Length; i++) {
-          Entity entity = entities[i];
-          if (!entity.TryGetComponent(out PrefabGUID prefabGuid)) {
-            continue;
-          }
-
-          string prefabName = ResolvePrefabName(prefabGuid);
-          if (string.IsNullOrWhiteSpace(prefabName)) {
-            continue;
-          }
-
-          snapshots[prefabGuid.GuidHash] = new PrefabSnapshot {
-            PrefabGuid = prefabGuid,
-            Name = prefabName
-          };
-        }
-      } finally {
-        entities.Dispose();
+    foreach (var pair in GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap) {
+      PrefabGUID prefabGuid = pair.Key;
+      if (prefabGuid.GuidHash == 0) {
+        continue;
       }
-    } finally {
-      query.Dispose();
-      queryBuilder.Dispose();
+
+      string prefabName = ResolvePrefabName(prefabGuid);
+      if (string.IsNullOrWhiteSpace(prefabName)) {
+        continue;
+      }
+
+      snapshots[prefabGuid.GuidHash] = new PrefabSnapshot {
+        PrefabGuid = prefabGuid,
+        Name = prefabName
+      };
     }
 
     return snapshots.Values.OrderBy(x => x.Name, StringComparer.Ordinal).ToList();
@@ -204,39 +194,27 @@ public static class ProfessionExperienceConfigService {
 
     return snapshots.Values.OrderBy(x => x.Name, StringComparer.Ordinal).ToList();
   }
-
-  private static List<ProfessionExperienceEntry> BuildGatherEntries(List<GatherSnapshot> snapshots, ProfessionType profession) {
-    Dictionary<int, ProfessionExperienceEntry> entries = new();
+  private static List<ExperienceEntry> BuildGatherEntries(List<GatherSnapshot> snapshots, ProfessionsTypes profession) {
+    Dictionary<int, ExperienceEntry> entries = new();
     int defaultExtraAtMax = GetDefaultExtraAtMax(profession);
 
     for (int i = 0; i < snapshots.Count; i++) {
       GatherSnapshot snapshot = snapshots[i];
-      PrefabGUID droppedItem = snapshot.YieldPrefab;
-
-      if (!MatchesGatherProfession(profession, droppedItem)) {
+      if (!MatchesGatherProfession(profession, snapshot.YieldPrefab)) {
         continue;
       }
 
-      bool enabled = !(profession == ProfessionType.Herbalista && IsPlantFiberDrop(droppedItem));
-      double exp = Math.Floor(Math.Max(0d, DefaultGatherBaseExperience * (double)ProfessionCatalogService.GetTierMultiplier(droppedItem)));
-      string dropName = ResolvePrefabName(droppedItem);
+      string dropName = ResolvePrefabName(snapshot.YieldPrefab);
       if (string.IsNullOrWhiteSpace(dropName)) {
         continue;
       }
 
-      string typeName = profession switch {
-        ProfessionType.Minerador => "Ore",
-        ProfessionType.Lenhador => "Tree",
-        ProfessionType.Herbalista => "Plant",
-        ProfessionType.Joalheiro => "Gem",
-        _ => "Resource"
-      };
-
-      entries[snapshot.PrefabGuid.GuidHash] = new ProfessionExperienceEntry {
-        Description = $"{snapshot.Name} is a {typeName} that drops {dropName} upon collected",
+      bool enabled = !(profession == ProfessionsTypes.Herbalista && IsPlantFiberDrop(snapshot.YieldPrefab));
+      entries[snapshot.PrefabGuid.GuidHash] = new ExperienceEntry {
+        Description = $"{snapshot.Name} drops {dropName}.",
         PrefabGUID = snapshot.PrefabGuid.GuidHash,
         Name = snapshot.Name,
-        EXP = exp,
+        EXP = DefaultGatherBaseExperience,
         MaxResourceYield = defaultExtraAtMax,
         Enabled = enabled
       };
@@ -245,26 +223,19 @@ public static class ProfessionExperienceConfigService {
     return entries.Values.OrderBy(x => x.Name, StringComparer.Ordinal).ToList();
   }
 
-  private static List<ProfessionExperienceEntry> BuildAlquimistaEntries(List<PrefabSnapshot> snapshots) {
-    Dictionary<int, ProfessionExperienceEntry> entries = new();
-
+  private static List<ExperienceEntry> BuildAlquimistaEntries(List<PrefabSnapshot> snapshots) {
+    Dictionary<int, ExperienceEntry> entries = new();
     for (int i = 0; i < snapshots.Count; i++) {
       PrefabSnapshot snapshot = snapshots[i];
-      if (!snapshot.Name.StartsWith("Item_", StringComparison.OrdinalIgnoreCase)) {
+      if (!snapshot.Name.StartsWith("Item_", StringComparison.OrdinalIgnoreCase) || !ProfessionCatalogService.IsConsumablePrefab(snapshot.PrefabGuid)) {
         continue;
       }
 
-      if (!ProfessionCatalogService.IsConsumablePrefab(snapshot.PrefabGuid)) {
-        continue;
-      }
-
-      double exp = Math.Floor(Math.Max(0d, DefaultCraftBaseExperience * (double)ProfessionCatalogService.GetTierMultiplier(snapshot.PrefabGuid)));
-
-      entries[snapshot.PrefabGuid.GuidHash] = new ProfessionExperienceEntry {
-        Description = $"{snapshot.Name} is a Consumable that grants experience upon crafted",
+      entries[snapshot.PrefabGuid.GuidHash] = new ExperienceEntry {
+        Description = $"{snapshot.Name} is a consumable crafted by Alquimista.",
         PrefabGUID = snapshot.PrefabGuid.GuidHash,
         Name = snapshot.Name,
-        EXP = exp,
+        EXP = DefaultCraftBaseExperience,
         Enabled = true
       };
     }
@@ -272,9 +243,9 @@ public static class ProfessionExperienceConfigService {
     return entries.Values.OrderBy(x => x.Name, StringComparer.Ordinal).ToList();
   }
 
-  private static List<ProfessionExperienceEntry> BuildCacadorEntries(List<PrefabSnapshot> snapshots) {
-    Dictionary<int, ProfessionExperienceEntry> entries = new();
-    int defaultExtraAtMax = GetDefaultExtraAtMax(ProfessionType.Cacador);
+  private static List<ExperienceEntry> BuildCacadorEntries(List<PrefabSnapshot> snapshots) {
+    Dictionary<int, ExperienceEntry> entries = new();
+    int defaultExtraAtMax = GetDefaultExtraAtMax(ProfessionsTypes.Cacador);
 
     for (int i = 0; i < snapshots.Count; i++) {
       PrefabSnapshot snapshot = snapshots[i];
@@ -282,11 +253,7 @@ public static class ProfessionExperienceConfigService {
         continue;
       }
 
-      if (!TryResolvePrefabEntity(snapshot.PrefabGuid, out Entity prefabEntity)) {
-        continue;
-      }
-
-      if (!prefabEntity.TryGetComponent(out UnitLevel unitLevel) || unitLevel.Level._Value <= 0) {
+      if (!TryResolvePrefabEntity(snapshot.PrefabGuid, out Entity prefabEntity) || !prefabEntity.TryGetComponent(out UnitLevel unitLevel) || unitLevel.Level._Value <= 0) {
         continue;
       }
 
@@ -299,12 +266,11 @@ public static class ProfessionExperienceConfigService {
         continue;
       }
 
-      double exp = Math.Floor(Math.Max(0d, unitLevel.Level._Value * HunterLevelExperienceFactor));
-      entries[snapshot.PrefabGuid.GuidHash] = new ProfessionExperienceEntry {
-        Description = $"{snapshot.Name} is a Hunter target that drops {leatherName} upon killed",
+      entries[snapshot.PrefabGuid.GuidHash] = new ExperienceEntry {
+        Description = $"{snapshot.Name} drops {leatherName}.",
         PrefabGUID = snapshot.PrefabGuid.GuidHash,
         Name = snapshot.Name,
-        EXP = exp,
+        EXP = Math.Floor(Math.Max(0d, unitLevel.Level._Value * HunterLevelExperienceFactor)),
         MaxResourceYield = defaultExtraAtMax,
         Enabled = true
       };
@@ -313,49 +279,36 @@ public static class ProfessionExperienceConfigService {
     return entries.Values.OrderBy(x => x.Name, StringComparer.Ordinal).ToList();
   }
 
-  private static void BuildHunterLeatherLookup(List<PrefabSnapshot> snapshots) {
+  private static void BuildHunterLeatherLookup() {
     CacadorLeatherDropByTarget.Clear();
-
-    for (int i = 0; i < snapshots.Count; i++) {
-      PrefabSnapshot snapshot = snapshots[i];
-      if (!snapshot.Name.StartsWith("CHAR_", StringComparison.OrdinalIgnoreCase)) {
+    foreach (int targetPrefabGuid in CacadorExperienceByTarget.Keys) {
+      PrefabGUID targetPrefab = new(targetPrefabGuid);
+      if (!TryResolvePrefabEntity(targetPrefab, out Entity prefabEntity) || !TryResolveLeatherDrop(prefabEntity, out PrefabGUID leatherDrop)) {
         continue;
       }
 
-      if (!TryResolvePrefabEntity(snapshot.PrefabGuid, out Entity prefabEntity)) {
-        continue;
-      }
-
-      if (!TryResolveLeatherDrop(prefabEntity, out PrefabGUID leatherDrop)) {
-        continue;
-      }
-
-      CacadorLeatherDropByTarget[snapshot.PrefabGuid.GuidHash] = leatherDrop;
+      CacadorLeatherDropByTarget[targetPrefabGuid] = leatherDrop;
     }
   }
 
   private static void LoadEnabledEntries(string path, Dictionary<int, double> xpTarget, Dictionary<int, int> extraTarget, bool includeExtra) {
     xpTarget.Clear();
     extraTarget?.Clear();
-
-    List<ProfessionExperienceEntry> entries = ReadEntries(path);
-
+    List<ExperienceEntry> entries = ReadEntries(path);
     for (int i = 0; i < entries.Count; i++) {
-      ProfessionExperienceEntry entry = entries[i];
+      ExperienceEntry entry = entries[i];
       if (entry == null || !entry.Enabled || entry.PrefabGUID == 0 || entry.EXP <= 0d) {
         continue;
       }
 
-      xpTarget[entry.PrefabGUID] = entry.EXP;
-
+      xpTarget[entry.PrefabGUID] = Math.Floor(entry.EXP);
       if (includeExtra && extraTarget != null) {
-        int extraAtMax = Math.Max(0, entry.MaxResourceYield);
-        extraTarget[entry.PrefabGUID] = extraAtMax;
+        extraTarget[entry.PrefabGUID] = Math.Max(0, entry.MaxResourceYield);
       }
     }
   }
 
-  private static List<ProfessionExperienceEntry> ReadEntries(string path) {
+  private static List<ExperienceEntry> ReadEntries(string path) {
     if (!File.Exists(path)) {
       return [];
     }
@@ -366,7 +319,7 @@ public static class ProfessionExperienceConfigService {
         return [];
       }
 
-      List<ProfessionExperienceEntry> entries = JsonSerializer.Deserialize<List<ProfessionExperienceEntry>>(json);
+      List<ExperienceEntry> entries = JsonSerializer.Deserialize<List<ExperienceEntry>>(json);
       return entries ?? [];
     } catch (Exception ex) {
       Plugin.LogInstance?.LogWarning($"[ProfessionsXPConfig] Failed to parse '{Path.GetFileName(path)}': {ex.Message}");
@@ -374,14 +327,11 @@ public static class ProfessionExperienceConfigService {
     }
   }
 
-  private static void EnsureConfigFile(string path, List<ProfessionExperienceEntry> entries) {
-    if (File.Exists(path)) {
-      return;
-    }
-
+  private static void WriteConfigFile(string path, List<ExperienceEntry> entries, bool overwriteExisting) {
     string json = JsonSerializer.Serialize(entries, JsonOptions);
     File.WriteAllText(path, json);
-    LogConfig($"EnsureConfigFile created file={Path.GetFileName(path)} entries={entries.Count}");
+    string action = overwriteExisting ? "Arquivo regenerado" : "Arquivo criado";
+    Plugin.LogInstance?.LogInfo($"[ProfessionsXPConfig] {action} em '{path}'.");
   }
 
   private static bool TryResolveGatherDrop(PrefabGUID prefabGuid, out PrefabGUID droppedItem) {
@@ -390,12 +340,15 @@ public static class ProfessionExperienceConfigService {
       return false;
     }
 
-    return TryResolveGatherDrop(prefabEntity, out droppedItem);
+    if (TryResolveGatherDrop(prefabEntity, out droppedItem)) {
+      return true;
+    }
+
+    return TryResolveGatherDropFromDropTables(prefabEntity, out droppedItem);
   }
 
   private static bool TryResolveGatherDrop(Entity prefabEntity, out PrefabGUID droppedItem) {
     droppedItem = PrefabGUID.Empty;
-
     if (!prefabEntity.TryGetBuffer(out DynamicBuffer<YieldResourcesOnDamageTaken> yields) || yields.IsEmpty) {
       return false;
     }
@@ -404,9 +357,52 @@ public static class ProfessionExperienceConfigService {
     return !droppedItem.IsEmpty();
   }
 
+  private static bool TryResolveGatherDropFromDropTables(Entity prefabEntity, out PrefabGUID droppedItem) {
+    droppedItem = PrefabGUID.Empty;
+    if (!prefabEntity.TryGetBuffer(out DynamicBuffer<DropTableBuffer> dropTables) || dropTables.IsEmpty) {
+      return false;
+    }
+
+    for (int i = 0; i < dropTables.Length; i++) {
+      DropTableBuffer dropTable = dropTables[i];
+      if (dropTable.DropTrigger != DropTriggerType.YieldResourceOnDamageTaken) {
+        continue;
+      }
+
+      if (!TryResolvePrefabEntity(dropTable.DropTableGuid, out Entity dropTableEntity)) {
+        continue;
+      }
+
+      DynamicBuffer<DropTableDataBuffer> dropItems;
+      try {
+        if (!dropTableEntity.TryGetBuffer(out dropItems) || dropItems.IsEmpty) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+
+      for (int j = 0; j < dropItems.Length; j++) {
+        PrefabGUID candidate = dropItems[j].ItemGuid;
+        if (candidate.IsEmpty() || !IsGatherRelevantDrop(candidate)) {
+          continue;
+        }
+
+        droppedItem = candidate;
+        return true;
+      }
+
+      PrefabGUID first = dropItems[0].ItemGuid;
+      if (!first.IsEmpty()) {
+        droppedItem = first;
+        return true;
+      }
+    }
+
+    return false;
+  }
   private static bool TryResolveLeatherDrop(Entity prefabEntity, out PrefabGUID leatherDrop) {
     leatherDrop = PrefabGUID.Empty;
-
     if (!prefabEntity.TryGetBuffer(out DynamicBuffer<DropTableBuffer> dropTables) || dropTables.IsEmpty) {
       return false;
     }
@@ -440,28 +436,29 @@ public static class ProfessionExperienceConfigService {
     return false;
   }
 
-  private static bool MatchesGatherProfession(ProfessionType profession, PrefabGUID droppedItem) {
+  private static bool IsGatherRelevantDrop(PrefabGUID itemGuid) {
+    return ProfessionCatalogService.IsOrePrefab(itemGuid)
+      || ProfessionCatalogService.IsWoodPrefab(itemGuid)
+      || ProfessionCatalogService.IsPlantPrefab(itemGuid)
+      || ProfessionCatalogService.IsGemPrefab(itemGuid);
+  }
+  private static bool MatchesGatherProfession(ProfessionsTypes profession, PrefabGUID droppedItem) {
     return profession switch {
-      ProfessionType.Minerador => ProfessionCatalogService.IsOrePrefab(droppedItem),
-      ProfessionType.Lenhador => ProfessionCatalogService.IsWoodPrefab(droppedItem),
-      ProfessionType.Herbalista => ProfessionCatalogService.IsPlantPrefab(droppedItem),
-      ProfessionType.Joalheiro => ProfessionCatalogService.IsGemPrefab(droppedItem),
+      ProfessionsTypes.Minerador => ProfessionCatalogService.IsOrePrefab(droppedItem),
+      ProfessionsTypes.Lenhador => ProfessionCatalogService.IsWoodPrefab(droppedItem),
+      ProfessionsTypes.Herbalista => ProfessionCatalogService.IsPlantPrefab(droppedItem),
       _ => false
     };
   }
 
   private static bool IsPlantFiberDrop(PrefabGUID droppedItem) {
-    return droppedItem.GuidHash == PrefabGUIDs.Item_Ingredient_Plant_PlantFiber.GuidHash
+    return droppedItem.GuidHash == ScarletCore.Resources.PrefabGUIDs.Item_Ingredient_Plant_PlantFiber.GuidHash
       || ProfessionCatalogService.GetNormalizedPrefabName(droppedItem).Contains("plantfiber", StringComparison.Ordinal);
   }
 
   private static bool TryResolvePrefabEntity(PrefabGUID prefabGuid, out Entity prefabEntity) {
     prefabEntity = Entity.Null;
-    if (!GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(prefabGuid, out Entity candidate)) {
-      return false;
-    }
-
-    if (candidate == Entity.Null) {
+    if (!GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(prefabGuid, out Entity candidate) || candidate == Entity.Null) {
       return false;
     }
 
@@ -472,21 +469,20 @@ public static class ProfessionExperienceConfigService {
   private static bool TryGetConfiguration(Dictionary<int, double> experienceMap, Dictionary<int, int> extraMap, int key, out double experience, out int extraAtMaxLevel) {
     experience = 0d;
     extraAtMaxLevel = 0;
-
     if (!experienceMap.TryGetValue(key, out experience)) {
       return false;
     }
 
-    extraMap.TryGetValue(key, out extraAtMaxLevel);
+    extraMap?.TryGetValue(key, out extraAtMaxLevel);
     return true;
   }
 
-  private static int GetDefaultExtraAtMax(ProfessionType profession) {
+  private static int GetDefaultExtraAtMax(ProfessionsTypes profession) {
     return profession switch {
-      ProfessionType.Minerador => CalculateDefaultExtraAtMax(ProfessionSettingsService.MineradorYieldMultiplier),
-      ProfessionType.Lenhador => CalculateDefaultExtraAtMax(ProfessionSettingsService.LenhadorYieldMultiplier),
-      ProfessionType.Herbalista => CalculateDefaultExtraAtMax(ProfessionSettingsService.HerbalistaYieldMultiplier),
-      ProfessionType.Cacador => CalculateDefaultExtraAtMax(ProfessionSettingsService.CacadorLeatherYieldMultiplier),
+      ProfessionsTypes.Minerador => CalculateDefaultExtraAtMax(ProfessionSettingsService.MineradorYieldMultiplier),
+      ProfessionsTypes.Lenhador => CalculateDefaultExtraAtMax(ProfessionSettingsService.LenhadorYieldMultiplier),
+      ProfessionsTypes.Herbalista => CalculateDefaultExtraAtMax(ProfessionSettingsService.HerbalistaYieldMultiplier),
+      ProfessionsTypes.Cacador => CalculateDefaultExtraAtMax(ProfessionSettingsService.CacadorLeatherYieldMultiplier),
       _ => 0
     };
   }
@@ -499,6 +495,24 @@ public static class ProfessionExperienceConfigService {
     return Math.Max(0, (int)Math.Floor(5d * multiplier));
   }
 
+  private static bool ShouldGenerateGatherConfig(string path) {
+    return !File.Exists(path) || IsBrokenEmptyConfig(path);
+  }
+
+  private static bool IsBrokenEmptyConfig(string path) {
+    try {
+      FileInfo fileInfo = new(path);
+      if (!fileInfo.Exists || fileInfo.Length > 4) {
+        return false;
+      }
+
+      string json = File.ReadAllText(path).Trim();
+      return string.IsNullOrEmpty(json) || string.Equals(json, "[]", StringComparison.Ordinal);
+    } catch {
+      return false;
+    }
+  }
+
   private static string ResolvePrefabName(PrefabGUID prefabGuid) {
     try {
       string name = prefabGuid.GetName();
@@ -506,10 +520,6 @@ public static class ProfessionExperienceConfigService {
     } catch {
       return string.Empty;
     }
-  }
-
-  private static void LogConfig(string message) {
-    Plugin.LogInstance?.LogInfo($"[ProfessionsXPConfig] {message}");
   }
 }
 

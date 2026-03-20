@@ -151,23 +151,6 @@ public static class CraftTrackingService {
     }
   }
 
-  public static void HandleUpdatePrison(NativeArray<Entity> entities) {
-    if (!GameSystems.Initialized) {
-      return;
-    }
-
-    double craftRateModifier = GetCraftRateModifier();
-    for (int i = 0; i < entities.Length; i++) {
-      Entity entity = entities[i];
-      if (!entity.Has<CastleWorkstation>() || !GameSystems.ServerGameManager.TryGetBuffer(entity, out DynamicBuffer<QueuedWorkstationCraftAction> queueBuffer) || queueBuffer.IsEmpty) {
-        CraftFinished.Remove(entity);
-        continue;
-      }
-
-      ProcessQueuedCraftAction(entity, queueBuffer[0], 1f, craftRateModifier);
-    }
-  }
-
   public static void HandleInventoryChanged(NativeArray<Entity> entities) {
     if (!GameSystems.Initialized) {
       return;
@@ -193,7 +176,6 @@ public static class CraftTrackingService {
 
       PrefabGUID itemPrefab = changedEvent.Item;
       Entity itemEntity = changedEvent.ItemEntity;
-
       if (itemEntity.Exists() && itemEntity.Has<UpgradeableLegendaryItem>()) {
         int tier = itemEntity.Read<UpgradeableLegendaryItem>().CurrentTier;
         itemPrefab = itemEntity.ReadBuffer<UpgradeableLegendaryItemTiers>()[tier].TierPrefab;
@@ -222,7 +204,6 @@ public static class CraftTrackingService {
     }
 
     bool craftFinished = CraftFinished.TryGetValue(station, out bool finished) && finished;
-
     Entity recipePrefab = ResolvePrefab(craftAction.RecipeGuid);
     PrefabGUID outputItem = GetItemFromRecipePrefab(recipePrefab);
     if (outputItem.IsEmpty() || !recipePrefab.TryGetComponent(out RecipeData recipeData)) {
@@ -232,7 +213,6 @@ public static class CraftTrackingService {
     double totalTime = (recipeData.CraftDuration * recipeReduction) / craftRateModifier;
     double craftProgress = craftAction.ProgressTime;
     double ratio = craftProgress / Math.Max(0.001d, totalTime);
-
     if (!craftFinished && ratio >= CraftThreshold) {
       CraftFinished[station] = true;
       ValidateCraftingJob(platformId, station, outputItem);
@@ -257,7 +237,6 @@ public static class CraftTrackingService {
     }
 
     validatedQueue.Add(platformId);
-
     jobs[itemPrefab] = pending - 1;
     if (jobs[itemPrefab] <= 0) {
       jobs.Remove(itemPrefab);
@@ -404,4 +383,3 @@ public static class CraftTrackingService {
     return 0;
   }
 }
-

@@ -9,7 +9,7 @@ using ScarletCore.Services;
 namespace CelemProfessions.Commands;
 
 [CommandGroup("profissao", Language.English, aliases: ["prof"])]
-public static class ProfessionsCommands {
+public static class Commands {
   private const int PageSize = 5;
   private const string ColorGreen = "#8FFD50";
   private const string ColorRed = "#FF5C5C";
@@ -22,7 +22,7 @@ public static class ProfessionsCommands {
       return;
     }
 
-    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionType profession, out string error)) {
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string error)) {
       context.ReplyError(error);
       return;
     }
@@ -38,7 +38,7 @@ public static class ProfessionsCommands {
       return;
     }
 
-    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionType profession, out string error)) {
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string error)) {
       context.ReplyError(error);
       return;
     }
@@ -94,7 +94,7 @@ public static class ProfessionsCommands {
       return;
     }
 
-    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionType profession, out string professionError)) {
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string professionError)) {
       context.ReplyError(professionError);
       return;
     }
@@ -119,7 +119,7 @@ public static class ProfessionsCommands {
       return;
     }
 
-    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionType profession, out string professionError)) {
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string professionError)) {
       context.ReplyError(professionError);
       return;
     }
@@ -139,7 +139,7 @@ public static class ProfessionsCommands {
       return;
     }
 
-    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionType profession, out string professionError)) {
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string professionError)) {
       context.ReplyError(professionError);
       return;
     }
@@ -159,7 +159,7 @@ public static class ProfessionsCommands {
       return;
     }
 
-    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionType profession, out string professionError)) {
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string professionError)) {
       context.ReplyError(professionError);
       return;
     }

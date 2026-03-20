@@ -26,7 +26,8 @@
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="copy &quot;$(TargetPath)&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\VRisingDedicatedServer\BepInEx\BloodpebblePlugins&quot; " ContinueOnError="true" />
+    <Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\VRisingDedicatedServer\BepInEx\plugins\CelemProfessions.dll&quot;" ContinueOnError="true" />
   </Target>
 </Project>
+
 

@@ -24,81 +24,52 @@ public static class ProfessionSettingsService {
       .Add("MineradorGoldChanceAtMax", 0.30, "Chance maxima de ouro extra no nivel 100.")
       .Add("MineradorGoldAmount", 1, "Quantidade de ouro extra por proc.")
       .Add("LenhadorYieldMultiplier", 1.0, "Escala da recompensa de madeira extra.")
-      .Add("LenhadorSaplingChanceAtMax", 0.35, "Chance maxima de muda extra no nivel 100.")
-      .Add("LenhadorSaplingAmount", 1, "Quantidade de mudas por proc.")
+      .Add("LenhadorSpecialDropChanceAtMax", 0.35, "Chance maxima de drop especial do Lenhador no nivel 100.")
       .Add("HerbalistaYieldMultiplier", 1.0, "Escala da recompensa de planta extra.")
-      .Add("HerbalistaSeedChanceAtMax", 0.35, "Chance maxima de sementes extras no nivel 100.")
-      .Add("HerbalistaSeedAmount", 1, "Quantidade de sementes por proc.")
+      .Add("HerbalistaSpecialDropChanceAtMax", 0.35, "Chance maxima de drop especial do Herbalista no nivel 100.")
       .Add("JoalheiroDurabilityBonusAtMax", 0.50, "Bonus maximo de durabilidade de colares no nivel 100.")
-      .Add("JoalheiroPerfectGemChanceAtMax", 0.25, "Chance maxima de gema perfeita no nivel 100.")
-      .Add("JoalheiroPerfectGemAmount", 1, "Quantidade de gema perfeita por proc.")
+      .Add("JoalheiroGemChanceAtMax", 0.25, "Chance maxima de gema extra no nivel 100.")
       .Add("AlfaiateDurabilityBonusAtMax", 0.50, "Bonus maximo de durabilidade de armaduras no nivel 100.")
       .Add("FerreiroDurabilityBonusAtMax", 0.50, "Bonus maximo de durabilidade de armas no nivel 100.")
       .Add("AlquimistaPowerBonusAtMax", 0.30, "Bonus maximo de poder no nivel 100 para consumiveis criados.")
       .Add("AlquimistaDurationBonusAtMax", 0.30, "Bonus maximo de duracao no nivel 100 para consumiveis criados.")
       .Add("CacadorLeatherYieldMultiplier", 1.0, "Escala da recompensa de couro extra.")
-      .Add("PescadorExtraFishChanceAtMax", 0.45, "Chance maxima de peixe extra no nivel 100.")
-      .Add("PescadorExtraFishAmount", 1, "Quantidade de peixes extras por proc.");
+      .Add("PescadorFishChanceAtMax", 0.45, "Chance maxima de peixe extra no nivel 100.");
   }
 
   public static double FishingBaseXp => Math.Max(0d, Plugin.Settings.Get<double>("FishingBaseXp"));
-
   public static PrefabGUID ResetPassiveCostItem => new(Plugin.Settings.Get<int>("ResetPassivesCostItem"));
-
   public static int ResetPassiveCostAmount => Math.Max(1, Plugin.Settings.Get<int>("ResetPassivesCostAmount"));
+  public static double MineradorYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("MineradorYieldMultiplier"));
+  public static double MineradorGoldChanceAtMax => ClampChance(Plugin.Settings.Get<double>("MineradorGoldChanceAtMax"));
+  public static int MineradorGoldAmount => Math.Max(1, Plugin.Settings.Get<int>("MineradorGoldAmount"));
+  public static double LenhadorYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("LenhadorYieldMultiplier"));
+  public static double LenhadorSpecialDropChanceAtMax => ClampChance(Plugin.Settings.Get<double>("LenhadorSpecialDropChanceAtMax"));
+  public static double HerbalistaYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("HerbalistaYieldMultiplier"));
+  public static double HerbalistaSpecialDropChanceAtMax => ClampChance(Plugin.Settings.Get<double>("HerbalistaSpecialDropChanceAtMax"));
+  public static double JoalheiroDurabilityBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("JoalheiroDurabilityBonusAtMax"));
+  public static double JoalheiroGemChanceAtMax => ClampChance(Plugin.Settings.Get<double>("JoalheiroGemChanceAtMax"));
+  public static double AlfaiateDurabilityBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("AlfaiateDurabilityBonusAtMax"));
+  public static double FerreiroDurabilityBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("FerreiroDurabilityBonusAtMax"));
+  public static double AlquimistaPowerBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("AlquimistaPowerBonusAtMax"));
+  public static double AlquimistaDurationBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("AlquimistaDurationBonusAtMax"));
+  public static double CacadorLeatherYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("CacadorLeatherYieldMultiplier"));
+  public static double PescadorFishChanceAtMax => ClampChance(Plugin.Settings.Get<double>("PescadorFishChanceAtMax"));
 
-  public static double GetXpMultiplier(ProfessionType profession) {
+  public static double GetXpMultiplier(ProfessionsTypes profession) {
     return profession switch {
-      ProfessionType.Minerador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierMinerador")),
-      ProfessionType.Lenhador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierLenhador")),
-      ProfessionType.Herbalista => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierHerbalista")),
-      ProfessionType.Joalheiro => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierJoalheiro")),
-      ProfessionType.Alfaiate => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierAlfaiate")),
-      ProfessionType.Ferreiro => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierFerreiro")),
-      ProfessionType.Alquimista => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierAlquimista")),
-      ProfessionType.Cacador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierCacador")),
-      ProfessionType.Pescador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierPescador")),
+      ProfessionsTypes.Minerador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierMinerador")),
+      ProfessionsTypes.Lenhador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierLenhador")),
+      ProfessionsTypes.Herbalista => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierHerbalista")),
+      ProfessionsTypes.Joalheiro => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierJoalheiro")),
+      ProfessionsTypes.Alfaiate => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierAlfaiate")),
+      ProfessionsTypes.Ferreiro => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierFerreiro")),
+      ProfessionsTypes.Alquimista => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierAlquimista")),
+      ProfessionsTypes.Cacador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierCacador")),
+      ProfessionsTypes.Pescador => Math.Max(0d, Plugin.Settings.Get<double>("XpMultiplierPescador")),
       _ => 1d
     };
   }
-
-  public static double MineradorYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("MineradorYieldMultiplier"));
-
-  public static double MineradorGoldChanceAtMax => ClampChance(Plugin.Settings.Get<double>("MineradorGoldChanceAtMax"));
-
-  public static int MineradorGoldAmount => Math.Max(1, Plugin.Settings.Get<int>("MineradorGoldAmount"));
-
-  public static double LenhadorYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("LenhadorYieldMultiplier"));
-
-  public static double LenhadorSaplingChanceAtMax => ClampChance(Plugin.Settings.Get<double>("LenhadorSaplingChanceAtMax"));
-
-  public static int LenhadorSaplingAmount => Math.Max(1, Plugin.Settings.Get<int>("LenhadorSaplingAmount"));
-
-  public static double HerbalistaYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("HerbalistaYieldMultiplier"));
-
-  public static double HerbalistaSeedChanceAtMax => ClampChance(Plugin.Settings.Get<double>("HerbalistaSeedChanceAtMax"));
-
-  public static int HerbalistaSeedAmount => Math.Max(1, Plugin.Settings.Get<int>("HerbalistaSeedAmount"));
-
-  public static double JoalheiroDurabilityBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("JoalheiroDurabilityBonusAtMax"));
-
-  public static double JoalheiroPerfectGemChanceAtMax => ClampChance(Plugin.Settings.Get<double>("JoalheiroPerfectGemChanceAtMax"));
-
-  public static int JoalheiroPerfectGemAmount => Math.Max(1, Plugin.Settings.Get<int>("JoalheiroPerfectGemAmount"));
-
-  public static double AlfaiateDurabilityBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("AlfaiateDurabilityBonusAtMax"));
-
-  public static double FerreiroDurabilityBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("FerreiroDurabilityBonusAtMax"));
-
-  public static double AlquimistaPowerBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("AlquimistaPowerBonusAtMax"));
-
-  public static double AlquimistaDurationBonusAtMax => Math.Max(0d, Plugin.Settings.Get<double>("AlquimistaDurationBonusAtMax"));
-
-  public static double CacadorLeatherYieldMultiplier => Math.Max(0d, Plugin.Settings.Get<double>("CacadorLeatherYieldMultiplier"));
-
-  public static double PescadorExtraFishChanceAtMax => ClampChance(Plugin.Settings.Get<double>("PescadorExtraFishChanceAtMax"));
-
-  public static int PescadorExtraFishAmount => Math.Max(1, Plugin.Settings.Get<int>("PescadorExtraFishAmount"));
 
   private static double ClampChance(double value) {
     return Math.Clamp(value, 0d, 1d);

@@ -2,7 +2,7 @@
 
 namespace CelemProfessions.Models;
 
-public sealed class ProfessionExperienceEntry {
+public sealed class ExperienceEntry {
   public string Description { get; set; } = string.Empty;
   public int PrefabGUID { get; set; }
   public string Name { get; set; } = string.Empty;

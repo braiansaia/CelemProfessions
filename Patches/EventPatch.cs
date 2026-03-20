@@ -10,7 +10,7 @@ using Unity.Entities;
 
 namespace CelemProfessions.Patches;
 
-public static class ProfessionsEventPatch {
+public static class EventPatch {
   public static void Initialize() {
     EventManager.On(PlayerEvents.PlayerJoined, HandlePlayerJoined);
     EventManager.On(PostfixEvents.OnDeath, HandleDeathEvents);
@@ -19,7 +19,6 @@ public static class ProfessionsEventPatch {
     EventManager.On(PrefixEvents.OnStartCrafting, HandleStartCrafting);
     EventManager.On(PrefixEvents.OnStopCrafting, HandleStopCrafting);
     EventManager.On(PrefixEvents.OnUpdateCrafting, HandleUpdateCrafting);
-    EventManager.On(PrefixEvents.OnUpdatePrison, HandleUpdatePrison);
     EventManager.On(PostfixEvents.OnGameplayEventDestroy, HandleGameplayEventDestroy);
     EventManager.On(PostfixEvents.OnBuffSpawn, HandleBuffSpawn);
   }
@@ -42,7 +41,6 @@ public static class ProfessionsEventPatch {
 
         Entity target = deathEvent.Died;
         PrefabGUID targetPrefab = target.GetPrefabGuid();
-
         ProfessionService.HandleGatherFromEntity(killer, target, targetPrefab);
         ProfessionService.HandleHunterKillEvent(new HunterKillEventData(killer, target, targetPrefab));
       } catch (Exception ex) {
@@ -88,14 +86,6 @@ public static class ProfessionsEventPatch {
       CraftTrackingService.HandleUpdateCrafting(entities);
     } catch (Exception ex) {
       Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch update crafting error: {ex.Message}");
-    }
-  }
-
-  private static void HandleUpdatePrison(NativeArray<Entity> entities) {
-    try {
-      CraftTrackingService.HandleUpdatePrison(entities);
-    } catch (Exception ex) {
-      Plugin.LogInstance?.LogWarning($"[CelemProfessions] ProfessionsEventPatch update prison error: {ex.Message}");
     }
   }
 

@@ -14,8 +14,8 @@ public sealed class ProfessionPassiveMilestoneDefinition {
   public ProfessionPassiveOption Option2 { get; set; } = new();
 }
 
-public sealed class ProfessionDefinition {
-  public ProfessionType Type { get; set; }
+public sealed class Definition {
+  public ProfessionsTypes Type { get; set; }
   public string DisplayName { get; set; } = string.Empty;
   public string ColorHex { get; set; } = "#FFFFFF";
   public List<string> Aliases { get; set; } = [];

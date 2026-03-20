@@ -1,6 +1,6 @@
 namespace CelemProfessions.Models;
 
-public enum ProfessionType {
+public enum ProfessionsTypes {
   Minerador,
   Lenhador,
   Herbalista,

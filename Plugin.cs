@@ -1,4 +1,5 @@
-﻿using BepInEx;
+using System;
+using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using CelemProfessions.Patches;
@@ -28,24 +29,36 @@ public class Plugin : BasePlugin {
     Database.EnableAutoBackup();
 
     ProfessionSettingsService.Configure();
-
     CommandHandler.RegisterAll();
     GameSystems.OnInitialize(OnInitialize);
   }
 
   private void OnInitialize() {
-    ProfessionExperienceConfigService.Initialize();
-    ProfessionService.Initialize();
-    ProfessionsEventPatch.Initialize();
+    RunInitializationStep("ProgressionService", ProgressionService.Initialize);
+    RunInitializationStep("RewardConfigService", RewardConfigService.Initialize);
+    RunInitializationStep("ExperienceConfigService", ProfessionExperienceConfigService.Initialize);
+    RunInitializationStep("ProfessionService", ProfessionService.Initialize);
+    RunInitializationStep("EventPatch", EventPatch.Initialize);
   }
 
   public override bool Unload() {
     CraftTrackingService.Shutdown();
+    RewardConfigService.Shutdown();
     ProfessionExperienceConfigService.Shutdown();
+    ProgressionService.Shutdown();
     ProfessionService.Shutdown();
     Database?.UnregisterAssembly();
     CommandHandler.UnregisterAssembly();
     EventManager.UnregisterAssembly();
     return true;
+  }
+
+  private static void RunInitializationStep(string stepName, Action initializer) {
+    try {
+      initializer();
+    } catch (Exception ex) {
+      LogInstance?.LogError($"[CelemProfessions] Failed while initializing {stepName}: {ex}");
+      throw;
+    }
   }
 }
