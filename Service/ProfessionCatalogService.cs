@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -12,6 +12,8 @@ namespace CelemProfessions.Service;
 public static class ProfessionCatalogService {
   private static readonly Dictionary<ProfessionType, ProfessionDefinition> Definitions = BuildDefinitions();
   private static readonly Dictionary<string, ProfessionType> AliasLookup = BuildAliasLookup();
+  private static readonly Dictionary<int, string> NormalizedPrefabNames = [];
+  private static readonly Dictionary<int, int> TierMultipliers = [];
 
   private static readonly Dictionary<int, PrefabGUID> PerfectGemByGem = new() {
     { PrefabGUIDs.Item_Ingredient_Gem_Amethyst_T01.GuidHash, PrefabGUIDs.Item_Ingredient_Gem_Amethyst_T04 },
@@ -123,8 +125,6 @@ public static class ProfessionCatalogService {
     }
   };
 
-  public static IReadOnlyDictionary<ProfessionType, ProfessionDefinition> AllDefinitions => Definitions;
-
   public static IReadOnlyList<PrefabGUID> TreeSaplingRewards => TreeSaplings;
 
   public static IReadOnlyList<PrefabGUID> PlantSeedRewards => PlantSeeds;
@@ -169,25 +169,25 @@ public static class ProfessionCatalogService {
       return false;
     }
 
-    var options = string.Join(", ", matches.Select(GetDisplayName));
+    string options = string.Join(", ", matches.Select(GetDisplayName));
     error = $"Profissao ambigua. Opcoes: {options}.";
     return false;
   }
 
   public static string GetDisplayName(ProfessionType profession) {
-    return Definitions.TryGetValue(profession, out var definition) ? definition.DisplayName : profession.ToString();
+    return Definitions.TryGetValue(profession, out ProfessionDefinition definition) ? definition.DisplayName : profession.ToString();
   }
 
   public static string GetColorHex(ProfessionType profession) {
-    return Definitions.TryGetValue(profession, out var definition) ? definition.ColorHex : "#FFFFFF";
+    return Definitions.TryGetValue(profession, out ProfessionDefinition definition) ? definition.ColorHex : "#FFFFFF";
   }
 
   public static IReadOnlyList<ProfessionPassiveMilestoneDefinition> GetMilestones(ProfessionType profession) {
-    return Definitions.TryGetValue(profession, out var definition) ? definition.PassiveMilestones : [];
+    return Definitions.TryGetValue(profession, out ProfessionDefinition definition) ? definition.PassiveMilestones : [];
   }
 
   public static bool IsOrePrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
 
     if (name.Contains("stone") && !name.Contains("ore") && !name.Contains("gem") && !name.Contains("quartz") && !name.Contains("bloodcrystal")) {
       return false;
@@ -203,12 +203,12 @@ public static class ProfessionCatalogService {
   }
 
   public static bool IsWoodPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("wood") || name.Contains("lumber") || name.Contains("plank");
   }
 
   public static bool IsPlantPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("plant")
       || name.Contains("fiber")
       || name.Contains("flower")
@@ -217,33 +217,23 @@ public static class ProfessionCatalogService {
       || name.Contains("trippyshroom");
   }
 
-  public static bool IsVegetationPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
-    return name.Contains("vegetation");
-  }
-
   public static bool IsGemPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("gem") || name.Contains("jewel") || name.Contains("magicsource");
   }
 
-  public static bool IsFishPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
-    return name.Contains("fish");
-  }
-
   public static bool IsLeatherPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("hide") || name.Contains("leather") || name.Contains("skin");
   }
 
   public static bool IsWeaponPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("weapon") || name.Contains("onyxtear");
   }
 
   public static bool IsArmorPrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("armor")
       || name.Contains("cloak")
       || name.Contains("bag")
@@ -255,12 +245,12 @@ public static class ProfessionCatalogService {
   }
 
   public static bool IsNecklacePrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("necklace") || name.Contains("pendant") || name.Contains("amulet") || name.Contains("magicsource");
   }
 
   public static bool IsConsumablePrefab(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(prefab);
     return name.Contains("canteen")
       || name.Contains("potion")
       || name.Contains("bottle")
@@ -275,17 +265,33 @@ public static class ProfessionCatalogService {
   }
 
   public static int GetTierMultiplier(PrefabGUID prefab) {
-    string name = prefab.GetName().ToLowerInvariant();
-    if (name.Contains("t09")) return 9;
-    if (name.Contains("t08")) return 8;
-    if (name.Contains("t07")) return 7;
-    if (name.Contains("t06")) return 6;
-    if (name.Contains("t05")) return 5;
-    if (name.Contains("t04")) return 4;
-    if (name.Contains("t03")) return 3;
-    if (name.Contains("t02")) return 2;
-    if (name.Contains("t01")) return 1;
-    return 1;
+    if (TierMultipliers.TryGetValue(prefab.GuidHash, out int tierMultiplier)) {
+      return tierMultiplier;
+    }
+
+    string name = GetNormalizedPrefabName(prefab);
+    if (name.Contains("t09")) {
+      tierMultiplier = 9;
+    } else if (name.Contains("t08")) {
+      tierMultiplier = 8;
+    } else if (name.Contains("t07")) {
+      tierMultiplier = 7;
+    } else if (name.Contains("t06")) {
+      tierMultiplier = 6;
+    } else if (name.Contains("t05")) {
+      tierMultiplier = 5;
+    } else if (name.Contains("t04")) {
+      tierMultiplier = 4;
+    } else if (name.Contains("t03")) {
+      tierMultiplier = 3;
+    } else if (name.Contains("t02")) {
+      tierMultiplier = 2;
+    } else {
+      tierMultiplier = 1;
+    }
+
+    TierMultipliers[prefab.GuidHash] = tierMultiplier;
+    return tierMultiplier;
   }
 
   public static bool TryGetPerfectGem(PrefabGUID collectedGem, out PrefabGUID perfectGem) {
@@ -293,15 +299,35 @@ public static class ProfessionCatalogService {
   }
 
   public static List<PrefabGUID> GetFishingAreaDrops(PrefabGUID fishingAreaPrefab) {
-    string name = fishingAreaPrefab.GetName().ToLowerInvariant();
+    string name = GetNormalizedPrefabName(fishingAreaPrefab);
 
-    foreach (var pair in FishingAreaDrops) {
+    foreach (KeyValuePair<string, List<PrefabGUID>> pair in FishingAreaDrops) {
       if (name.Contains(pair.Key)) {
         return pair.Value;
       }
     }
 
     return FishingAreaDrops["farbane"];
+  }
+
+  internal static string GetNormalizedPrefabName(PrefabGUID prefab) {
+    int key = prefab.GuidHash;
+    if (key == 0) {
+      return string.Empty;
+    }
+
+    if (NormalizedPrefabNames.TryGetValue(key, out string name)) {
+      return name;
+    }
+
+    try {
+      name = prefab.GetName().ToLowerInvariant();
+    } catch {
+      name = string.Empty;
+    }
+
+    NormalizedPrefabNames[key] = name;
+    return name;
   }
 
   private static Dictionary<ProfessionType, ProfessionDefinition> BuildDefinitions() {
@@ -382,7 +408,7 @@ public static class ProfessionCatalogService {
           Type = ProfessionType.Cacador,
           DisplayName = "Cacador",
           ColorHex = "#C08552",
-          Aliases = ["cacador", "ca�ador", "hunter", "hunting"],
+          Aliases = ["cacador", "caçador", "hunter", "hunting"],
           PassiveMilestones = BuildPlaceholderMilestones("Cacador")
         }
       },
@@ -452,7 +478,7 @@ public static class ProfessionCatalogService {
   private static Dictionary<string, ProfessionType> BuildAliasLookup() {
     var lookup = new Dictionary<string, ProfessionType>(StringComparer.Ordinal);
 
-    foreach (var definition in Definitions.Values) {
+    foreach (ProfessionDefinition definition in Definitions.Values) {
       foreach (string alias in definition.Aliases) {
         lookup[Normalize(alias)] = definition.Type;
       }
@@ -486,4 +512,3 @@ public static class ProfessionCatalogService {
     return sb.ToString();
   }
 }
-
