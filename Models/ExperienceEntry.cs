@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace CelemProfessions.Models;
 
@@ -9,10 +9,15 @@ public sealed class ExperienceEntry {
   public double EXP { get; set; }
   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
   public int MaxResourceYield { get; set; }
+  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+  public int PassiveTier { get; set; }
+  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+  public int? PassiveDropPrefabGUID { get; set; }
+  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+  public bool? Aggressive { get; set; }
 
   public bool Enabled { get; set; } = true;
 }
-
 
 public sealed class FishingRegionExperienceEntry {
   public string Region { get; set; } = string.Empty;

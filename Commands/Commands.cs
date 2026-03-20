@@ -11,9 +11,6 @@ namespace CelemProfessions.Commands;
 [CommandGroup("profissao", Language.English, aliases: ["prof"])]
 public static class Commands {
   private const int PageSize = 5;
-  private const string ColorGreen = "#8FFD50";
-  private const string ColorRed = "#FF5C5C";
-  private const string ColorGray = "#9AA0A6";
 
   [Command("detalhes", Language.English, aliases: ["d"], description: "Mostra os detalhes da profissao.", usage: ".prof d [profissao]")]
   public static void Details(CommandContext context, string professionInput) {
@@ -112,6 +109,38 @@ public static class Commands {
     context.ReplySuccess($"Passiva {option} escolhida para {ProfessionCatalogService.GetDisplayName(profession)} no nivel {milestoneLevel}.");
   }
 
+  [Command("escolhidas", Language.English, aliases: ["es", "sel"], description: "Mostra apenas as passivas escolhidas da profissao.", usage: ".prof es [profissao]")]
+  public static void SelectedPassives(CommandContext context, string professionInput) {
+    if (context.Sender == null) {
+      context.ReplyError("Dados do jogador nao foram encontrados.");
+      return;
+    }
+
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string error)) {
+      context.ReplyError(error);
+      return;
+    }
+
+    ProfessionService.ProfessionDetailsView details = ProfessionService.GetProfessionDetails(context.Sender.PlatformId, profession);
+    ReplySelectedPassives(context, details);
+  }
+
+  [Command("passivas", Language.English, aliases: ["pa", "all"], description: "Mostra todas as passivas da profissao, incluindo bloqueadas e escolhidas.", usage: ".prof passivas [profissao]")]
+  public static void AllPassives(CommandContext context, string professionInput) {
+    if (context.Sender == null) {
+      context.ReplyError("Dados do jogador nao foram encontrados.");
+      return;
+    }
+
+    if (!ProfessionCatalogService.TryResolveProfession(professionInput, out ProfessionsTypes profession, out string error)) {
+      context.ReplyError(error);
+      return;
+    }
+
+    ProfessionService.ProfessionDetailsView details = ProfessionService.GetProfessionDetails(context.Sender.PlatformId, profession);
+    ReplyAllPassives(context, details);
+  }
+
   [Command("setnivel", Language.English, aliases: ["sn"], adminOnly: true, description: "Define o nivel de uma profissao do jogador.", usage: ".prof sn [jogador] [profissao] [1-100]")]
   public static void SetLevel(CommandContext context, string playerNameOrId, string professionInput, int level) {
     if (!TryResolvePlayer(playerNameOrId, out ulong platformId, out string resolvedName)) {
@@ -201,27 +230,49 @@ public static class Commands {
       context.ReplyRaw("Progresso: <color=#8FFD50>NIVEL MAXIMO</color>");
     }
 
-    context.ReplyRaw("Passivas:");
+    int selectedCount = 0;
+    for (int i = 0; i < details.Passives.Count; i++) {
+      if (details.Passives[i].SelectedOption == 1 || details.Passives[i].SelectedOption == 2) {
+        selectedCount++;
+      }
+    }
+
+    context.ReplyRaw($"Passivas escolhidas: <color=#8FFD50>{selectedCount}</color>/{details.Passives.Count}. Use <color=#56B5E1>.prof passivas {details.DisplayName}</color> para ver todas e <color=#56B5E1>.prof es {details.DisplayName}</color> para ver apenas as escolhidas.");
+  }
+
+  private static void ReplySelectedPassives(CommandContext context, ProfessionService.ProfessionDetailsView details) {
+    context.ReplyRaw($"[ PASSIVAS ] <color={details.ColorHex}>{details.DisplayName}</color>");
+
+    bool hasSelection = false;
     for (int i = 0; i < details.Passives.Count; i++) {
       ProfessionService.ProfessionPassiveView passive = details.Passives[i];
-      string option1Color;
-      string option2Color;
-
-      if (passive.SelectedOption == 1) {
-        option1Color = ColorGreen;
-        option2Color = ColorRed;
-      } else if (passive.SelectedOption == 2) {
-        option1Color = ColorRed;
-        option2Color = ColorGreen;
-      } else {
-        option1Color = ColorGray;
-        option2Color = ColorGray;
+      if (passive.SelectedOption != 1 && passive.SelectedOption != 2) {
+        continue;
       }
 
-      string unlockText = passive.Unlocked ? "<color=#8FFD50>desbloqueado</color>" : "<color=#9AA0A6>bloqueado</color>";
-      context.ReplyRaw($"- N{(int)passive.Milestone} ({unlockText})");
-      context.ReplyRaw($"  [1] <color={option1Color}>{passive.Option1.Name}</color> - {passive.Option1.Description}");
-      context.ReplyRaw($"  [2] <color={option2Color}>{passive.Option2.Name}</color> - {passive.Option2.Description}");
+      hasSelection = true;
+      ProfessionPassiveOption option = passive.SelectedOption == 1 ? passive.Option1 : passive.Option2;
+      context.ReplyRaw($"- N{(int)passive.Milestone}: [OPCAO {passive.SelectedOption}] {option.Name} - {option.Description}");
+    }
+
+    if (!hasSelection) {
+      context.ReplyWarning("Nenhuma passiva foi escolhida nessa profissao ainda.");
+    }
+  }
+
+  private static void ReplyAllPassives(CommandContext context, ProfessionService.ProfessionDetailsView details) {
+    context.ReplyRaw($"[ PASSIVAS COMPLETAS ] <color={details.ColorHex}>{details.DisplayName}</color>");
+
+    for (int i = 0; i < details.Passives.Count; i++) {
+      ProfessionService.ProfessionPassiveView passive = details.Passives[i];
+      int milestone = (int)passive.Milestone;
+      string status = passive.Unlocked
+        ? "<color=#8FFD50>DESBLOQUEADA</color>"
+        : "<color=#FFB347>BLOQUEADA</color>";
+
+      context.ReplyRaw($"N{milestone} | {status}");
+      context.ReplyRaw($"  [1]{(passive.SelectedOption == 1 ? " <color=#8FFD50>[ESCOLHIDA]</color>" : string.Empty)} {passive.Option1.Name} - {passive.Option1.Description}");
+      context.ReplyRaw($"  [2]{(passive.SelectedOption == 2 ? " <color=#8FFD50>[ESCOLHIDA]</color>" : string.Empty)} {passive.Option2.Name} - {passive.Option2.Description}");
     }
   }
 

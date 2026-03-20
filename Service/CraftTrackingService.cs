@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using ProjectM;
 using ProjectM.Network;
@@ -463,15 +463,11 @@ public static class CraftTrackingService {
   }
 
   private static bool IsTrackedCraftItem(PrefabGUID itemPrefab) {
-    if (ProfessionExperienceConfigService.IsAlchemyCraftConfigured(itemPrefab)) {
-      return true;
-    }
-
-    return ProfessionCatalogService.IsNecklacePrefab(itemPrefab)
-      || ProfessionCatalogService.IsArmorPrefab(itemPrefab)
-      || ProfessionCatalogService.IsWeaponPrefab(itemPrefab);
+    return ProfessionExperienceConfigService.IsAlchemyCraftConfigured(itemPrefab)
+      || ProfessionExperienceConfigService.IsJewelerCraftConfigured(itemPrefab)
+      || ProfessionExperienceConfigService.IsTailorCraftConfigured(itemPrefab)
+      || ProfessionExperienceConfigService.IsBlacksmithCraftConfigured(itemPrefab);
   }
-
   private static ulong ResolvePlatformId(Entity entity) {
     if (!entity.Exists()) {
       return 0;
@@ -493,3 +489,4 @@ public static class CraftTrackingService {
     return 0;
   }
 }
+
