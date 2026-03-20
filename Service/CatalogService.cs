@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -231,7 +231,7 @@ public static class ProfessionCatalogService {
           DisplayName = "Lenhador",
           ColorHex = "#8B5A2B",
           Aliases = ["lenhador", "woodcutting", "madeira", "wood"],
-          PassiveMilestones = BuildPlaceholderMilestones("Lenhador")
+          PassiveMilestones = BuildLenhadorPassiveMilestones()
         }
       },
       {
@@ -241,7 +241,7 @@ public static class ProfessionCatalogService {
           DisplayName = "Herbalista",
           ColorHex = "#3FA34D",
           Aliases = ["herbalista", "herbalism", "herb", "coleta", "harvesting"],
-          PassiveMilestones = BuildPlaceholderMilestones("Herbalista")
+          PassiveMilestones = BuildHerbalistaPassiveMilestones()
         }
       },
       {
@@ -251,7 +251,7 @@ public static class ProfessionCatalogService {
           DisplayName = "Joalheiro",
           ColorHex = "#C77DFF",
           Aliases = ["joalheiro", "jewel", "jeweler", "jewelcrafting", "encantamento", "enchanting"],
-          PassiveMilestones = BuildPlaceholderMilestones("Joalheiro")
+          PassiveMilestones = BuildJoalheiroPassiveMilestones()
         }
       },
       {
@@ -261,7 +261,7 @@ public static class ProfessionCatalogService {
           DisplayName = "Alfaiate",
           ColorHex = "#E5989B",
           Aliases = ["alfaiate", "alfaiataria", "tailor", "tailoring"],
-          PassiveMilestones = BuildPlaceholderMilestones("Alfaiate")
+          PassiveMilestones = BuildAlfaiatePassiveMilestones()
         }
       },
       {
@@ -271,7 +271,7 @@ public static class ProfessionCatalogService {
           DisplayName = "Ferreiro",
           ColorHex = "#6C757D",
           Aliases = ["ferreiro", "blacksmith", "blacksmithing", "smith"],
-          PassiveMilestones = BuildPlaceholderMilestones("Ferreiro")
+          PassiveMilestones = BuildFerreiroPassiveMilestones()
         }
       },
       {
@@ -281,7 +281,7 @@ public static class ProfessionCatalogService {
           DisplayName = "Alquimista",
           ColorHex = "#2EC4B6",
           Aliases = ["alquimista", "alquimia", "alchemy", "alchemist"],
-          PassiveMilestones = BuildPlaceholderMilestones("Alquimista")
+          PassiveMilestones = BuildAlquimistaPassiveMilestones()
         }
       },
       {
@@ -290,8 +290,8 @@ public static class ProfessionCatalogService {
           Type = ProfessionsTypes.Cacador,
           DisplayName = "Cacador",
           ColorHex = "#C08552",
-          Aliases = ["cacador", "caçador", "hunter", "hunting"],
-          PassiveMilestones = BuildPlaceholderMilestones("Cacador")
+          Aliases = ["cacador", "ca�ador", "hunter", "hunting"],
+          PassiveMilestones = BuildCacadorPassiveMilestones()
         }
       },
       {
@@ -301,7 +301,7 @@ public static class ProfessionCatalogService {
           DisplayName = "Pescador",
           ColorHex = "#4D9DE0",
           Aliases = ["pescador", "pesca", "fishing", "fisher"],
-          PassiveMilestones = BuildPlaceholderMilestones("Pescador")
+          PassiveMilestones = BuildPescadorPassiveMilestones()
         }
       }
     };
@@ -311,52 +311,226 @@ public static class ProfessionCatalogService {
     return [
       new ProfessionPassiveMilestoneDefinition {
         Milestone = ProfessionMilestone.Level25,
-        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Pepita Dourada", Description = "Chance de obter ouro ao coletar veias de cobre." },
-        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Cobre Extra", Description = "Chance de obter cobre extra ao coletar veias de cobre." }
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Ouro Extra", Description = "Chance de coletar ouro ao quebrar qualquer pedra." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Cobre Extra", Description = "Chance de coletar cobre ao quebrar qualquer veia de cobre." }
       },
       new ProfessionPassiveMilestoneDefinition {
         Milestone = ProfessionMilestone.Level50,
-        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Pepita Dourada", Description = "Chance de obter ouro ao coletar veias de ferro." },
-        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Ferro Extra", Description = "Chance de obter ferro extra ao coletar veias de ferro." }
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Ouro Extra", Description = "Chance de coletar ouro ao quebrar qualquer pedra." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Ferro Extra", Description = "Chance de coletar ferro ao quebrar qualquer veia de ferro." }
       },
       new ProfessionPassiveMilestoneDefinition {
         Milestone = ProfessionMilestone.Level75,
-        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Pepita Dourada", Description = "Chance de obter ouro ao coletar veias de quartzo." },
-        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Quartzo Extra", Description = "Chance de obter quartzo extra ao coletar veias de quartzo." }
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Ouro Extra", Description = "Chance de coletar ouro ao quebrar qualquer pedra." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Quartzo Extra", Description = "Chance de coletar quartzo ao quebrar qualquer veia de quartzo." }
       },
       new ProfessionPassiveMilestoneDefinition {
         Milestone = ProfessionMilestone.Level100,
-        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Pepita Dourada", Description = "Chance de obter ouro ao coletar cristal de sangue." },
-        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Cristal de Sangue Extra", Description = "Chance de obter cristal de sangue extra ao coletar cristal de sangue." }
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Ouro Extra", Description = "Chance de coletar ouro ao quebrar qualquer pedra." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Cristal de Sangue Extra", Description = "Chance de coletar cristal de sangue ao quebrar cristal de sangue." }
       }
     ];
   }
 
-  private static List<ProfessionPassiveMilestoneDefinition> BuildPlaceholderMilestones(string professionName) {
+  private static List<ProfessionPassiveMilestoneDefinition> BuildLenhadorPassiveMilestones() {
     return [
-      BuildPlaceholderMilestone(ProfessionMilestone.Level25, professionName),
-      BuildPlaceholderMilestone(ProfessionMilestone.Level50, professionName),
-      BuildPlaceholderMilestone(ProfessionMilestone.Level75, professionName),
-      BuildPlaceholderMilestone(ProfessionMilestone.Level100, professionName)
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Semente de Madeira Normal", Description = "Chance de coletar a semente da arvore ao quebrar arvore de madeira normal." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Madeira Normal Extra", Description = "Chance de aumentar a quantidade de Item_Ingredient_Wood_Standard." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Semente de Madeira Hollow", Description = "Chance de coletar a semente da arvore ao quebrar arvore de madeira hollow." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Madeira Hollow Extra", Description = "Chance de aumentar a quantidade de Item_Ingredient_Wood_Hallow." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Semente de Madeira Cursed", Description = "Chance de coletar a semente da arvore ao quebrar arvore de madeira cursed." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Madeira Cursed Extra", Description = "Chance de aumentar a quantidade de Item_Ingredient_Wood_Cursed." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Semente de Madeira Gloom", Description = "Chance de coletar a semente da arvore ao quebrar arvore de madeira gloom." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Madeira Gloom Extra", Description = "Chance de aumentar a quantidade de Item_Ingredient_Wood_Gloom." }
+      }
     ];
   }
 
-  private static ProfessionPassiveMilestoneDefinition BuildPlaceholderMilestone(ProfessionMilestone milestone, string professionName) {
-    return new ProfessionPassiveMilestoneDefinition {
-      Milestone = milestone,
-      Option1 = new ProfessionPassiveOption {
-        Option = 1,
-        Name = $"{professionName} Passiva A",
-        Description = "Estrutura pronta para efeito futuro."
+  private static List<ProfessionPassiveMilestoneDefinition> BuildHerbalistaPassiveMilestones() {
+    return [
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Sementes Iniciais", Description = "Chance de coletar sementes de Blood Rose, Mourning Lily e Hell's Clarion." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Colheita Inicial", Description = "Chance de aumentar a quantidade de Blood Rose, Mourning Lily e Hell's Clarion." }
       },
-      Option2 = new ProfessionPassiveOption {
-        Option = 2,
-        Name = $"{professionName} Passiva B",
-        Description = "Estrutura pronta para efeito futuro."
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Sementes Intermediarias", Description = "Chance de coletar sementes de Cotton, Sunflower e Thistle." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Colheita Intermediaria", Description = "Chance de aumentar a quantidade de Cotton, Sunflower e Thistle." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Sementes Avancadas", Description = "Chance de coletar sementes de Fire Blossom, Snow Flower e Bleeding Heart." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Colheita Avancada", Description = "Chance de aumentar a quantidade de Fire Blossom, Snow Flower e Bleeding Heart." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Sementes Finais", Description = "Chance de coletar sementes de Sacred Grape, Ghost Shroom e Plague Brier." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Colheita Final", Description = "Chance de aumentar a quantidade de Sacred Grape, Ghost Shroom e Plague Brier." }
       }
-    };
+    ];
   }
 
+  private static List<ProfessionPassiveMilestoneDefinition> BuildJoalheiroPassiveMilestones() {
+    return [
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Gema Perfeita", Description = "Chance de coletar gema perfeita ao quebrar pedra de gema." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade de Colar", Description = "+1% de durabilidade em colares criados." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Gema Perfeita", Description = "Chance de coletar gema perfeita ao quebrar pedra de gema." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade de Colar", Description = "+2% de durabilidade em colares criados." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Gema Perfeita", Description = "Chance de coletar gema perfeita ao quebrar pedra de gema." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade de Colar", Description = "+5% de durabilidade em colares criados." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Gema Perfeita", Description = "Chance de coletar gema perfeita ao quebrar pedra de gema." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade de Colar", Description = "+7% de durabilidade em colares criados." }
+      }
+    ];
+  }
+
+  private static List<ProfessionPassiveMilestoneDefinition> BuildAlfaiatePassiveMilestones() {
+    return [
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Fisica", Description = "+1% de durabilidade em armaduras Rogue e Warrior." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Magica", Description = "+1% de durabilidade em armaduras Brute e Scholar." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Fisica", Description = "+3% de durabilidade em armaduras Rogue e Warrior." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Magica", Description = "+3% de durabilidade em armaduras Brute e Scholar." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Fisica", Description = "+6% de durabilidade em armaduras Rogue e Warrior." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Magica", Description = "+6% de durabilidade em armaduras Brute e Scholar." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Fisica", Description = "+10% de durabilidade em armaduras Rogue e Warrior." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Magica", Description = "+10% de durabilidade em armaduras Brute e Scholar." }
+      }
+    ];
+  }
+
+  private static List<ProfessionPassiveMilestoneDefinition> BuildFerreiroPassiveMilestones() {
+    return [
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Curto Alcance", Description = "+2% de durabilidade em armas de curto alcance." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Longo Alcance", Description = "+2% de durabilidade em armas de longo alcance." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Curto Alcance", Description = "+5% de durabilidade em armas de curto alcance." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Longo Alcance", Description = "+5% de durabilidade em armas de longo alcance." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Curto Alcance", Description = "+8% de durabilidade em armas de curto alcance." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Longo Alcance", Description = "+8% de durabilidade em armas de longo alcance." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Durabilidade Curto Alcance", Description = "+15% de durabilidade em armas de curto alcance." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Durabilidade Longo Alcance", Description = "+15% de durabilidade em armas de longo alcance." }
+      }
+    ];
+  }
+
+  private static List<ProfessionPassiveMilestoneDefinition> BuildAlquimistaPassiveMilestones() {
+    return [
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Duracao de Pocoes", Description = "+5% na duracao de todas as pocoes." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Eficiencia de Pocoes", Description = "+1% na eficiencia de todas as pocoes." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Duracao de Pocoes", Description = "+8% na duracao de todas as pocoes." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Eficiencia de Pocoes", Description = "+2% na eficiencia de todas as pocoes." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Duracao de Pocoes", Description = "+13% na duracao de todas as pocoes." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Eficiencia de Pocoes", Description = "+5% na eficiencia de todas as pocoes." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Duracao de Pocoes", Description = "+17% na duracao de todas as pocoes." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Eficiencia de Pocoes", Description = "+7% na eficiencia de todas as pocoes." }
+      }
+    ];
+  }
+
+  private static List<ProfessionPassiveMilestoneDefinition> BuildCacadorPassiveMilestones() {
+    return [
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Couro Passivo", Description = "+3% de couro em animais passivos." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Couro Agressivo", Description = "+2% de couro em animais agressivos." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Couro Passivo", Description = "+5% de couro em animais passivos." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Couro Agressivo", Description = "+3% de couro em animais agressivos." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Couro Passivo", Description = "+7% de couro em animais passivos." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Couro Agressivo", Description = "+5% de couro em animais agressivos." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Couro Passivo", Description = "+10% de couro em animais passivos." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Couro Agressivo", Description = "+7% de couro em animais agressivos." }
+      }
+    ];
+  }
+
+  private static List<ProfessionPassiveMilestoneDefinition> BuildPescadorPassiveMilestones() {
+    return [
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level25,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Peixe Especifico", Description = "Chance de coletar Item_Ingredient_Fish_FatGoby_T01 em qualquer regiao." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Bonus Regional", Description = "Chance de +1 peixe em FARBANE e DUNLEY." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level50,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Peixe Especifico", Description = "Chance de coletar Item_Ingredient_Fish_RainbowTrout_T01 em qualquer regiao." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Bonus Regional", Description = "Chance de +1 peixe em CURSED e GLOOMROT." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level75,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Peixe Especifico", Description = "Chance de coletar Item_Ingredient_Fish_BloodSnapper_T02 em qualquer regiao." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Bonus Regional", Description = "Chance de +1 peixe em MORTIUM e STRONGBLADE." }
+      },
+      new ProfessionPassiveMilestoneDefinition {
+        Milestone = ProfessionMilestone.Level100,
+        Option1 = new ProfessionPassiveOption { Option = 1, Name = "Peixe Especifico", Description = "Chance de coletar Item_Ingredient_Fish_SageFish_T02 em qualquer regiao." },
+        Option2 = new ProfessionPassiveOption { Option = 2, Name = "Bonus Regional", Description = "Chance de +1 peixe em SILVERLIGHT." }
+      }
+    ];
+  }
   private static Dictionary<string, ProfessionsTypes> BuildAliasLookup() {
     Dictionary<string, ProfessionsTypes> lookup = new(StringComparer.Ordinal);
     foreach (Definition definition in Definitions.Values) {
@@ -393,3 +567,5 @@ public static class ProfessionCatalogService {
     return builder.ToString();
   }
 }
+
+

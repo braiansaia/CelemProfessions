@@ -37,6 +37,7 @@ public class Plugin : BasePlugin {
     RunInitializationStep("ProgressionService", ProgressionService.Initialize);
     RunInitializationStep("RewardConfigService", RewardConfigService.Initialize);
     RunInitializationStep("ExperienceConfigService", ProfessionExperienceConfigService.Initialize);
+    RunInitializationStep("PassiveConfigService", PassiveConfigService.Initialize);
     RunInitializationStep("ProfessionService", ProfessionService.Initialize);
     RunInitializationStep("EventPatch", EventPatch.Initialize);
   }
@@ -45,6 +46,7 @@ public class Plugin : BasePlugin {
     CraftTrackingService.Shutdown();
     RewardConfigService.Shutdown();
     ProfessionExperienceConfigService.Shutdown();
+    PassiveConfigService.Shutdown();
     ProgressionService.Shutdown();
     ProfessionService.Shutdown();
     Database?.UnregisterAssembly();

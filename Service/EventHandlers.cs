@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using CelemProfessions.Events;
 using CelemProfessions.Models;
 using ProjectM;
@@ -37,26 +37,25 @@ public static partial class ProfessionService {
       return;
     }
 
-    AddExperience(gatherEvent.Player, gatherEvent.Profession, baseValue, out ProfessionProgressData progress, out _, out _);
+    AddExperience(gatherEvent.Player, gatherEvent.Profession, baseValue, out _, out _, out _);
     switch (gatherEvent.Profession) {
       case ProfessionsTypes.Minerador:
-        HandleMinerRewards(gatherEvent.Player, gatherEvent.YieldPrefab, progress.Level, extraAtMaxLevel);
+        HandleMinerRewards(gatherEvent.Player, gatherEvent.YieldPrefab, extraAtMaxLevel);
         break;
       case ProfessionsTypes.Lenhador:
-        HandleWoodRewards(gatherEvent.Player, gatherEvent.YieldPrefab, progress.Level, extraAtMaxLevel);
+        HandleWoodRewards(gatherEvent.Player, gatherEvent.TargetPrefab, gatherEvent.YieldPrefab, extraAtMaxLevel);
         break;
       case ProfessionsTypes.Herbalista:
-        HandleHerbalRewards(gatherEvent.Player, gatherEvent.YieldPrefab, progress.Level, extraAtMaxLevel);
+        HandleHerbalRewards(gatherEvent.Player, gatherEvent.TargetPrefab, gatherEvent.YieldPrefab, extraAtMaxLevel);
         break;
     }
   }
-
   public static void HandleHunterKillEvent(in HunterKillEventData hunterEvent) {
     if (hunterEvent.Player == null || !hunterEvent.Target.Exists() || hunterEvent.Target.IsPlayer()) {
       return;
     }
 
-    if (!ProfessionExperienceConfigService.TryGetHunterConfiguration(hunterEvent.TargetPrefab, out double baseValue, out PrefabGUID leatherPrefab, out int extraAtMaxLevel)) {
+    if (!ProfessionExperienceConfigService.TryGetHunterConfiguration(hunterEvent.TargetPrefab, out double baseValue, out PrefabGUID leatherPrefab, out int extraAtMaxLevel, out bool aggressive)) {
       return;
     }
 
@@ -65,8 +64,9 @@ public static partial class ProfessionService {
     if (extraReward > 0) {
       GiveReward(hunterEvent.Player, ProfessionsTypes.Cacador, leatherPrefab, extraReward);
     }
-  }
 
+    HandleHunterPassiveRewards(hunterEvent.Player, leatherPrefab, aggressive);
+  }
   public static void HandleFishingEvent(in FishingEventData fishingEvent) {
     if (fishingEvent.Player == null || !fishingEvent.Player.CharacterEntity.Exists()) {
       return;
@@ -78,15 +78,8 @@ public static partial class ProfessionService {
     }
 
     AddExperience(fishingEvent.Player, ProfessionsTypes.Pescador, fishingExperience, out ProfessionProgressData progress, out _, out _);
-    if (!RollChance(ProfessionSettingsService.PescadorFishChanceAtMax * progress.Level / 100d)) {
-      return;
-    }
-
-    if (RewardConfigService.TryGetRandomFishingReward(fishingEvent.FishingAreaPrefab, progress.Level, out PrefabGUID rewardPrefab)) {
-      GiveReward(fishingEvent.Player, ProfessionsTypes.Pescador, rewardPrefab, 1);
-    }
+    HandleFishingRewards(fishingEvent.Player, fishingEvent.FishingAreaPrefab, progress.Level);
   }
-
   public static void HandleFishingGameplayEvent(Entity entity) {
     if (!entity.TryGetComponent(out EntityOwner owner) || !owner.Owner.Exists() || !entity.TryGetComponent(out PrefabGUID prefabGuid) || !prefabGuid.Equals(FishingTravelToTarget)) {
       return;
@@ -154,21 +147,19 @@ public static partial class ProfessionService {
       return;
     }
 
-    AddExperience(player, profession, experienceToAdd, out ProfessionProgressData progress, out _, out _);
+    AddExperience(player, profession, experienceToAdd, out _, out _, out _);
     switch (profession) {
       case ProfessionsTypes.Joalheiro:
-        ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.JoalheiroDurabilityBonusAtMax);
-        HandleJewelCraftRewards(player, progress.Level);
+        ApplyJewelerCraftDurabilityPassive(player.PlatformId, itemEntity, itemPrefab);
         break;
       case ProfessionsTypes.Alfaiate:
-        ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.AlfaiateDurabilityBonusAtMax);
+        ApplyTailorCraftDurabilityPassive(player.PlatformId, itemEntity, itemPrefab);
         break;
       case ProfessionsTypes.Ferreiro:
-        ApplyDurabilityBonus(itemEntity, itemPrefab, progress.Level, ProfessionSettingsService.FerreiroDurabilityBonusAtMax);
+        ApplyBlacksmithCraftDurabilityPassive(player.PlatformId, itemEntity, itemPrefab);
         break;
     }
   }
-
   public static void HandleBuffSpawn(Entity buffEntity) {
     if (!buffEntity.Exists() || !buffEntity.TryGetComponent(out Buff buff) || !buff.Target.Exists() || !buff.Target.IsPlayer() || !buffEntity.TryGetComponent(out PrefabGUID buffPrefab) || !IsConsumableBuff(buffPrefab)) {
       return;
@@ -179,9 +170,7 @@ public static partial class ProfessionService {
       return;
     }
 
-    ProfessionProgressData progress = GetProfessionProgress(EnsurePlayerData(playerData.PlatformId), ProfessionsTypes.Alquimista);
-    double powerMultiplier = 1d + ProfessionSettingsService.AlquimistaPowerBonusAtMax * progress.Level / 100d;
-    double durationMultiplier = 1d + ProfessionSettingsService.AlquimistaDurationBonusAtMax * progress.Level / 100d;
+    ResolveAlquimistaBuffMultipliers(playerData.PlatformId, out double powerMultiplier, out double durationMultiplier);
     if (powerMultiplier <= 1d && durationMultiplier <= 1d) {
       return;
     }
@@ -190,3 +179,4 @@ public static partial class ProfessionService {
     MessageService.SendInfo(playerData, $"Consumivel aprimorado aplicado: poder x{powerMultiplier:0.###} | duracao x{durationMultiplier:0.###}.");
   }
 }
+

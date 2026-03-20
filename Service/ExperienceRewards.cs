@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Globalization;
 using CelemProfessions.Models;
 using ProjectM;
@@ -88,57 +89,328 @@ public static partial class ProfessionService {
     }
   }
 
-  private static void HandleMinerRewards(PlayerData player, PrefabGUID yieldPrefab, int professionLevel, int extraAtMaxLevel) {
-    int extraReward = CalculateScaledExtraBonus(professionLevel, extraAtMaxLevel);
+  private static void HandleMinerRewards(PlayerData player, PrefabGUID yieldPrefab, int extraAtMaxLevel) {
+    if (player == null) {
+      return;
+    }
+
+    ProfessionProgressData mineradorProgress = GetProfessionProgress(EnsurePlayerData(player.PlatformId), ProfessionsTypes.Minerador);
+    int extraReward = CalculateScaledExtraBonus(mineradorProgress.Level, extraAtMaxLevel);
     if (extraReward > 0) {
       GiveReward(player, ProfessionsTypes.Minerador, yieldPrefab, extraReward);
     }
 
-    if (RollChance(ProfessionSettingsService.MineradorGoldChanceAtMax * professionLevel / 100d)) {
-      GiveReward(player, ProfessionsTypes.Minerador, PrefabGUIDs.Item_Ingredient_Mineral_GoldOre, ProfessionSettingsService.MineradorGoldAmount);
+    foreach (KeyValuePair<int, int> choice in mineradorProgress.PassiveChoices) {
+      int milestone = choice.Key;
+      int option = choice.Value;
+      if (!PassiveConfigService.TryGetOptionEffect(ProfessionsTypes.Minerador, option, milestone, out PassiveOptionEffectEntry effect)) {
+        continue;
+      }
+
+      double chancePercent = ResolvePassiveChancePercent(effect);
+      if (chancePercent <= 0d || !RollChance(chancePercent / 100d) || effect.RewardPrefabGUID == 0) {
+        continue;
+      }
+
+      PrefabGUID rewardPrefab = new(effect.RewardPrefabGUID);
+      if (option == 2 && rewardPrefab.GuidHash != yieldPrefab.GuidHash) {
+        continue;
+      }
+
+      GiveReward(player, ProfessionsTypes.Minerador, rewardPrefab, Math.Max(1, effect.Amount));
+    }
+
+    if (ProfessionCatalogService.IsGemPrefab(yieldPrefab)) {
+      HandleJewelerGemNodeRewards(player);
     }
   }
 
-  private static void HandleWoodRewards(PlayerData player, PrefabGUID yieldPrefab, int professionLevel, int extraAtMaxLevel) {
-    int extraReward = CalculateScaledExtraBonus(professionLevel, extraAtMaxLevel);
+  private static void HandleWoodRewards(PlayerData player, PrefabGUID targetPrefab, PrefabGUID yieldPrefab, int extraAtMaxLevel) {
+    if (player == null) {
+      return;
+    }
+
+    ProfessionProgressData lenhadorProgress = GetProfessionProgress(EnsurePlayerData(player.PlatformId), ProfessionsTypes.Lenhador);
+    int extraReward = CalculateScaledExtraBonus(lenhadorProgress.Level, extraAtMaxLevel);
     if (extraReward > 0) {
       GiveReward(player, ProfessionsTypes.Lenhador, yieldPrefab, extraReward);
     }
 
-    if (!RollChance(ProfessionSettingsService.LenhadorSpecialDropChanceAtMax * professionLevel / 100d)) {
+    if (!ProfessionExperienceConfigService.TryGetGatherPassiveConfiguration(ProfessionsTypes.Lenhador, targetPrefab, out int passiveTier, out PrefabGUID passiveDropPrefab) || passiveTier <= 0 || !lenhadorProgress.PassiveChoices.TryGetValue(passiveTier, out int selectedOption)) {
       return;
     }
 
-    if (RewardConfigService.TryGetRandomSaplingReward(professionLevel, out PrefabGUID rewardPrefab)) {
-      GiveReward(player, ProfessionsTypes.Lenhador, rewardPrefab, 1);
+    if (!PassiveConfigService.TryGetOptionEffect(ProfessionsTypes.Lenhador, selectedOption, passiveTier, out PassiveOptionEffectEntry effect)) {
+      return;
     }
+
+    double chancePercent = ResolvePassiveChancePercent(effect);
+    if (chancePercent <= 0d || !RollChance(chancePercent / 100d)) {
+      return;
+    }
+
+    if (selectedOption == 1) {
+      if (passiveDropPrefab.IsEmpty()) {
+        return;
+      }
+
+      GiveReward(player, ProfessionsTypes.Lenhador, passiveDropPrefab, Math.Max(1, effect.Amount));
+      return;
+    }
+
+    GiveReward(player, ProfessionsTypes.Lenhador, yieldPrefab, Math.Max(1, effect.Amount));
   }
 
-  private static void HandleHerbalRewards(PlayerData player, PrefabGUID yieldPrefab, int professionLevel, int extraAtMaxLevel) {
-    int extraReward = CalculateScaledExtraBonus(professionLevel, extraAtMaxLevel);
+  private static void HandleHerbalRewards(PlayerData player, PrefabGUID targetPrefab, PrefabGUID yieldPrefab, int extraAtMaxLevel) {
+    if (player == null) {
+      return;
+    }
+
+    ProfessionProgressData herbalistaProgress = GetProfessionProgress(EnsurePlayerData(player.PlatformId), ProfessionsTypes.Herbalista);
+    int extraReward = CalculateScaledExtraBonus(herbalistaProgress.Level, extraAtMaxLevel);
     if (extraReward > 0) {
       GiveReward(player, ProfessionsTypes.Herbalista, yieldPrefab, extraReward);
     }
 
-    if (!RollChance(ProfessionSettingsService.HerbalistaSpecialDropChanceAtMax * professionLevel / 100d)) {
+    if (!ProfessionExperienceConfigService.TryGetGatherPassiveConfiguration(ProfessionsTypes.Herbalista, targetPrefab, out int passiveTier, out PrefabGUID passiveDropPrefab) || passiveTier <= 0 || !herbalistaProgress.PassiveChoices.TryGetValue(passiveTier, out int selectedOption)) {
       return;
     }
 
-    if (RewardConfigService.TryGetRandomSeedReward(professionLevel, out PrefabGUID rewardPrefab)) {
-      GiveReward(player, ProfessionsTypes.Herbalista, rewardPrefab, 1);
-    }
-  }
-
-  private static void HandleJewelCraftRewards(PlayerData player, int professionLevel) {
-    if (!RollChance(ProfessionSettingsService.JoalheiroGemChanceAtMax * professionLevel / 100d)) {
+    if (!PassiveConfigService.TryGetOptionEffect(ProfessionsTypes.Herbalista, selectedOption, passiveTier, out PassiveOptionEffectEntry effect)) {
       return;
     }
 
-    if (RewardConfigService.TryGetRandomGemReward(professionLevel, out PrefabGUID rewardPrefab)) {
-      GiveReward(player, ProfessionsTypes.Joalheiro, rewardPrefab, 1);
+    double chancePercent = ResolvePassiveChancePercent(effect);
+    if (chancePercent <= 0d || !RollChance(chancePercent / 100d)) {
+      return;
+    }
+
+    if (selectedOption == 1) {
+      if (passiveDropPrefab.IsEmpty()) {
+        return;
+      }
+
+      GiveReward(player, ProfessionsTypes.Herbalista, passiveDropPrefab, Math.Max(1, effect.Amount));
+      return;
+    }
+
+    GiveReward(player, ProfessionsTypes.Herbalista, yieldPrefab, Math.Max(1, effect.Amount));
+  }
+
+  private static void HandleJewelerGemNodeRewards(PlayerData player) {
+    if (player == null) {
+      return;
+    }
+
+    ProfessionProgressData joalheiroProgress = GetProfessionProgress(EnsurePlayerData(player.PlatformId), ProfessionsTypes.Joalheiro);
+    foreach (KeyValuePair<int, int> choice in joalheiroProgress.PassiveChoices) {
+      if (choice.Value != 1) {
+        continue;
+      }
+
+      if (!PassiveConfigService.TryGetOptionEffect(ProfessionsTypes.Joalheiro, 1, choice.Key, out PassiveOptionEffectEntry effect)) {
+        continue;
+      }
+
+      double chancePercent = ResolvePassiveChancePercent(effect);
+      if (chancePercent <= 0d || !RollChance(chancePercent / 100d)) {
+        continue;
+      }
+
+      if (RewardConfigService.TryGetRandomGemReward(joalheiroProgress.Level, out PrefabGUID rewardPrefab)) {
+        GiveReward(player, ProfessionsTypes.Joalheiro, rewardPrefab, Math.Max(1, effect.Amount));
+      }
     }
   }
 
+  private static void HandleHunterPassiveRewards(PlayerData player, PrefabGUID leatherPrefab, bool aggressiveTarget) {
+    if (player == null || leatherPrefab.IsEmpty()) {
+      return;
+    }
+
+    int requiredOption = aggressiveTarget ? 2 : 1;
+    ProfessionProgressData cacadorProgress = GetProfessionProgress(EnsurePlayerData(player.PlatformId), ProfessionsTypes.Cacador);
+    foreach (KeyValuePair<int, int> choice in cacadorProgress.PassiveChoices) {
+      if (choice.Value != requiredOption) {
+        continue;
+      }
+
+      if (!PassiveConfigService.TryGetOptionEffect(ProfessionsTypes.Cacador, requiredOption, choice.Key, out PassiveOptionEffectEntry effect)) {
+        continue;
+      }
+
+      double chancePercent = ResolvePassiveChancePercent(effect);
+      if (chancePercent <= 0d || !RollChance(chancePercent / 100d)) {
+        continue;
+      }
+
+      GiveReward(player, ProfessionsTypes.Cacador, leatherPrefab, Math.Max(1, effect.Amount));
+    }
+  }
+
+  private static void HandleFishingRewards(PlayerData player, PrefabGUID fishingAreaPrefab, int professionLevel) {
+    if (player == null) {
+      return;
+    }
+
+    if (RollChance(ProfessionSettingsService.PescadorFishChanceAtMax * professionLevel / 100d)
+        && RewardConfigService.TryGetRandomFishingReward(fishingAreaPrefab, professionLevel, out PrefabGUID baseRewardPrefab)) {
+      GiveReward(player, ProfessionsTypes.Pescador, baseRewardPrefab, 1);
+    }
+
+    ProfessionProgressData pescadorProgress = GetProfessionProgress(EnsurePlayerData(player.PlatformId), ProfessionsTypes.Pescador);
+    ProfessionCatalogService.TryResolveFishingRegion(fishingAreaPrefab, out string normalizedRegion);
+
+    foreach (KeyValuePair<int, int> choice in pescadorProgress.PassiveChoices) {
+      int option = choice.Value;
+      if (!PassiveConfigService.TryGetOptionEffect(ProfessionsTypes.Pescador, option, choice.Key, out PassiveOptionEffectEntry effect)) {
+        continue;
+      }
+
+      double chancePercent = ResolvePassiveChancePercent(effect);
+      if (chancePercent <= 0d || !RollChance(chancePercent / 100d)) {
+        continue;
+      }
+
+      if (option == 1) {
+        if (effect.RewardPrefabGUID == 0) {
+          continue;
+        }
+
+        GiveReward(player, ProfessionsTypes.Pescador, new PrefabGUID(effect.RewardPrefabGUID), Math.Max(1, effect.Amount));
+        continue;
+      }
+
+      if (option != 2 || string.IsNullOrWhiteSpace(normalizedRegion)) {
+        continue;
+      }
+
+      bool regionAllowed = false;
+      for (int r = 0; r < effect.Regions.Count; r++) {
+        if (PassiveConfigService.NormalizeRegion(effect.Regions[r]) == normalizedRegion) {
+          regionAllowed = true;
+          break;
+        }
+      }
+
+      if (!regionAllowed || !RewardConfigService.TryGetRandomFishingReward(fishingAreaPrefab, professionLevel, out PrefabGUID regionRewardPrefab)) {
+        continue;
+      }
+
+      GiveReward(player, ProfessionsTypes.Pescador, regionRewardPrefab, Math.Max(1, effect.Amount));
+    }
+  }
+
+  private static void ApplyJewelerCraftDurabilityPassive(ulong platformId, Entity itemEntity, PrefabGUID itemPrefab) {
+    double bonusPercent = SumSelectedPassiveBonusPercent(platformId, ProfessionsTypes.Joalheiro, requiredOption: 2, itemPrefab, ResolveCraftCategoryOption.Joalheiro);
+    ApplyDurabilityBonus(itemEntity, itemPrefab, bonusPercent);
+  }
+
+  private static void ApplyTailorCraftDurabilityPassive(ulong platformId, Entity itemEntity, PrefabGUID itemPrefab) {
+    double bonusPercent = SumSelectedPassiveBonusPercent(platformId, ProfessionsTypes.Alfaiate, requiredOption: 0, itemPrefab, ResolveCraftCategoryOption.Alfaiate);
+    ApplyDurabilityBonus(itemEntity, itemPrefab, bonusPercent);
+  }
+
+  private static void ApplyBlacksmithCraftDurabilityPassive(ulong platformId, Entity itemEntity, PrefabGUID itemPrefab) {
+    double bonusPercent = SumSelectedPassiveBonusPercent(platformId, ProfessionsTypes.Ferreiro, requiredOption: 0, itemPrefab, ResolveCraftCategoryOption.Ferreiro);
+    ApplyDurabilityBonus(itemEntity, itemPrefab, bonusPercent);
+  }
+
+  private enum ResolveCraftCategoryOption {
+    Joalheiro,
+    Alfaiate,
+    Ferreiro
+  }
+
+  private static int ResolveOptionForCraftItem(PrefabGUID itemPrefab, ResolveCraftCategoryOption category) {
+    string itemName = ProfessionCatalogService.GetNormalizedPrefabName(itemPrefab);
+    if (string.IsNullOrWhiteSpace(itemName)) {
+      return 0;
+    }
+
+    return category switch {
+      ResolveCraftCategoryOption.Joalheiro => 2,
+      ResolveCraftCategoryOption.Alfaiate => itemName.Contains("_rogue", StringComparison.Ordinal) || itemName.Contains("_warrior", StringComparison.Ordinal)
+        ? 1
+        : (itemName.Contains("_brute", StringComparison.Ordinal) || itemName.Contains("_scholar", StringComparison.Ordinal) ? 2 : 0),
+      ResolveCraftCategoryOption.Ferreiro => itemName.Contains("crossbow", StringComparison.Ordinal) || itemName.Contains("longbow", StringComparison.Ordinal) || itemName.Contains("daggers", StringComparison.Ordinal)
+        ? 2
+        : 1,
+      _ => 0
+    };
+  }
+
+  private static double SumSelectedPassiveBonusPercent(ulong platformId, ProfessionsTypes profession, int requiredOption, PrefabGUID itemPrefab, ResolveCraftCategoryOption category) {
+    int option = requiredOption > 0 ? requiredOption : ResolveOptionForCraftItem(itemPrefab, category);
+    if (option <= 0) {
+      return 0d;
+    }
+
+    ProfessionProgressData progress = GetProfessionProgress(EnsurePlayerData(platformId), profession);
+    double totalBonusPercent = 0d;
+    foreach (KeyValuePair<int, int> choice in progress.PassiveChoices) {
+      if (choice.Value != option) {
+        continue;
+      }
+
+      if (!PassiveConfigService.TryGetOptionEffect(profession, option, choice.Key, out PassiveOptionEffectEntry effect)) {
+        continue;
+      }
+
+      totalBonusPercent += ResolvePassiveBonusPercent(effect);
+    }
+
+    return Math.Max(0d, totalBonusPercent);
+  }
+  private static void ResolveAlquimistaBuffMultipliers(ulong platformId, out double powerMultiplier, out double durationMultiplier) {
+    powerMultiplier = 1d;
+    durationMultiplier = 1d;
+
+    ProfessionProgressData progress = GetProfessionProgress(EnsurePlayerData(platformId), ProfessionsTypes.Alquimista);
+    double totalDurationPercent = 0d;
+    double totalPowerPercent = 0d;
+
+    foreach (KeyValuePair<int, int> choice in progress.PassiveChoices) {
+      int option = choice.Value;
+      if (!PassiveConfigService.TryGetOptionEffect(ProfessionsTypes.Alquimista, option, choice.Key, out PassiveOptionEffectEntry effect)) {
+        continue;
+      }
+
+      double bonusPercent = ResolvePassiveBonusPercent(effect);
+      if (bonusPercent <= 0d) {
+        continue;
+      }
+
+      if (option == 1) {
+        totalDurationPercent += bonusPercent;
+      } else if (option == 2) {
+        totalPowerPercent += bonusPercent;
+      }
+    }
+
+    powerMultiplier = 1d + totalPowerPercent / 100d;
+    durationMultiplier = 1d + totalDurationPercent / 100d;
+  }
+
+  private static double ResolvePassiveChancePercent(PassiveOptionEffectEntry effect) {
+    if (effect == null) {
+      return 0d;
+    }
+
+    return effect.ChancePercent > 0d
+      ? Math.Max(0d, effect.ChancePercent)
+      : Math.Max(0d, effect.BonusPercent);
+  }
+
+  private static double ResolvePassiveBonusPercent(PassiveOptionEffectEntry effect) {
+    if (effect == null) {
+      return 0d;
+    }
+
+    return effect.BonusPercent > 0d
+      ? Math.Max(0d, effect.BonusPercent)
+      : Math.Max(0d, effect.ChancePercent);
+  }
   private static int CalculateScaledExtraBonus(int professionLevel, int extraAtMaxLevel) {
     if (professionLevel <= 0 || extraAtMaxLevel <= 0) {
       return 0;
@@ -148,8 +420,8 @@ public static partial class ProfessionService {
     return Math.Max(0, (int)Math.Floor(scaled));
   }
 
-  private static void ApplyDurabilityBonus(Entity itemEntity, PrefabGUID itemPrefab, int level, double bonusAtMax) {
-    if (!itemEntity.Exists() || !itemEntity.Has<Durability>() || bonusAtMax <= 0d || !GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(itemPrefab, out Entity prefabEntity) || !prefabEntity.Exists() || !prefabEntity.Has<Durability>()) {
+  private static void ApplyDurabilityBonus(Entity itemEntity, PrefabGUID itemPrefab, double bonusPercent) {
+    if (!itemEntity.Exists() || !itemEntity.Has<Durability>() || bonusPercent <= 0d || !GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(itemPrefab, out Entity prefabEntity) || !prefabEntity.Exists() || !prefabEntity.Has<Durability>()) {
       return;
     }
 
@@ -159,18 +431,21 @@ public static partial class ProfessionService {
       return;
     }
 
-    double multiplier = 1d + bonusAtMax * level / 100d;
+    double multiplier = 1d + bonusPercent / 100d;
     if (multiplier <= 1d) {
       return;
     }
 
-    float adjustedMax = (float)(currentDurability.MaxDurability * multiplier);
+    float adjustedMax = (float)Math.Floor(currentDurability.MaxDurability * multiplier);
+    if (adjustedMax <= currentDurability.MaxDurability) {
+      return;
+    }
+
     itemEntity.With<Durability>((ECSExtensions.WithRefHandler<Durability>)delegate(ref Durability value) {
       value.MaxDurability = adjustedMax;
       value.Value = adjustedMax;
     });
   }
-
   private static void ApplyConsumableBuffBonus(Entity buffEntity, double powerMultiplier, double durationMultiplier) {
     if (powerMultiplier > 1d && buffEntity.TryGetBuffer(out DynamicBuffer<ModifyUnitStatBuff_DOTS> statBuffs) && !statBuffs.IsEmpty) {
       for (int i = 0; i < statBuffs.Length; i++) {
@@ -191,7 +466,7 @@ public static partial class ProfessionService {
     if (durationMultiplier > 1d && buffEntity.Has<HealOnGameplayEvent>() && buffEntity.TryGetBuffer(out DynamicBuffer<CreateGameplayEventsOnTick> tickEvents) && !tickEvents.IsEmpty) {
       for (int i = 0; i < tickEvents.Length; i++) {
         CreateGameplayEventsOnTick entry = tickEvents[i];
-        entry.MaxTicks = Math.Max(1, (int)Math.Round(entry.MaxTicks * durationMultiplier));
+        entry.MaxTicks = Math.Max(1, (int)Math.Floor(entry.MaxTicks * durationMultiplier));
         tickEvents[i] = entry;
       }
     }
@@ -223,24 +498,23 @@ public static partial class ProfessionService {
       return true;
     }
 
-    if (ProfessionCatalogService.IsNecklacePrefab(itemPrefab)) {
+    if (ProfessionExperienceConfigService.IsJewelerCraftConfigured(itemPrefab)) {
       profession = ProfessionsTypes.Joalheiro;
       return true;
     }
 
-    if (ProfessionCatalogService.IsArmorPrefab(itemPrefab)) {
+    if (ProfessionExperienceConfigService.IsTailorCraftConfigured(itemPrefab)) {
       profession = ProfessionsTypes.Alfaiate;
       return true;
     }
 
-    if (ProfessionCatalogService.IsWeaponPrefab(itemPrefab)) {
+    if (ProfessionExperienceConfigService.IsBlacksmithCraftConfigured(itemPrefab)) {
       profession = ProfessionsTypes.Ferreiro;
       return true;
     }
 
     return false;
   }
-
   private static bool RollChance(double chance) {
     if (chance <= 0d) {
       return false;
@@ -293,3 +567,12 @@ public static partial class ProfessionService {
     return (int)Math.Max(1d, Math.Round(Math.Max(0d, value)));
   }
 }
+
+
+
+
+
+
+
+
+
