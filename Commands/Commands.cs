@@ -84,7 +84,7 @@ public static class Commands {
     }
   }
 
-  [Command("passiva", Language.English, aliases: ["p"], description: "Escolhe uma passiva para o marco da profissao.", usage: ".prof p [profissao] [25|50|75|100] [1|2]")]
+  [Command("escolherpassiva", Language.English, aliases: ["ep"], description: "Escolhe uma passiva para o marco da profissao.", usage: ".prof escolherpassiva|ep [profissao] [25|50|75|100] [1|2]")]
   public static void Passive(CommandContext context, string professionInput, int milestoneLevel, int option) {
     if (context.Sender == null) {
       context.ReplyError("Dados do jogador nao foram encontrados.");
@@ -125,8 +125,8 @@ public static class Commands {
     ReplySelectedPassives(context, details);
   }
 
-  [Command("passivas", Language.English, aliases: ["pa", "all"], description: "Mostra todas as passivas da profissao, incluindo bloqueadas e escolhidas.", usage: ".prof passivas [profissao]")]
-  public static void AllPassives(CommandContext context, string professionInput) {
+  [Command("passivas", Language.English, aliases: ["pa", "all"], description: "Mostra todas as passivas da profissao, incluindo bloqueadas e escolhidas.", usage: ".prof passivas [profissao] [pagina]")]
+  public static void AllPassives(CommandContext context, string professionInput, int page = 1) {
     if (context.Sender == null) {
       context.ReplyError("Dados do jogador nao foram encontrados.");
       return;
@@ -138,7 +138,7 @@ public static class Commands {
     }
 
     ProfessionService.ProfessionDetailsView details = ProfessionService.GetProfessionDetails(context.Sender.PlatformId, profession);
-    ReplyAllPassives(context, details);
+    ReplyAllPassives(context, details, page);
   }
 
   [Command("setnivel", Language.English, aliases: ["sn"], adminOnly: true, description: "Define o nivel de uma profissao do jogador.", usage: ".prof sn [jogador] [profissao] [1-100]")]
@@ -260,19 +260,30 @@ public static class Commands {
     }
   }
 
-  private static void ReplyAllPassives(CommandContext context, ProfessionService.ProfessionDetailsView details) {
+  private static void ReplyAllPassives(CommandContext context, ProfessionService.ProfessionDetailsView details, int page) {
     context.ReplyRaw($"[ PASSIVAS COMPLETAS ] <color={details.ColorHex}>{details.DisplayName}</color>");
 
-    for (int i = 0; i < details.Passives.Count; i++) {
-      ProfessionService.ProfessionPassiveView passive = details.Passives[i];
-      int milestone = (int)passive.Milestone;
-      string status = passive.Unlocked
-        ? "<color=#8FFD50>DESBLOQUEADA</color>"
-        : "<color=#FFB347>BLOQUEADA</color>";
+    int totalPages = Math.Max(1, details.Passives.Count);
+    int currentPage = Math.Clamp(page, 1, totalPages);
+    int index = currentPage - 1;
+    if (index >= details.Passives.Count) {
+      context.ReplyWarning("Nenhuma passiva encontrada para essa profissao.");
+      return;
+    }
 
-      context.ReplyRaw($"N{milestone} | {status}");
-      context.ReplyRaw($"  [1]{(passive.SelectedOption == 1 ? " <color=#8FFD50>[ESCOLHIDA]</color>" : string.Empty)} {passive.Option1.Name} - {passive.Option1.Description}");
-      context.ReplyRaw($"  [2]{(passive.SelectedOption == 2 ? " <color=#8FFD50>[ESCOLHIDA]</color>" : string.Empty)} {passive.Option2.Name} - {passive.Option2.Description}");
+    ProfessionService.ProfessionPassiveView passive = details.Passives[index];
+    int milestone = (int)passive.Milestone;
+    string status = passive.Unlocked
+      ? "<color=#8FFD50>DESBLOQUEADA</color>"
+      : "<color=#FFB347>BLOQUEADA</color>";
+
+    context.ReplyRaw($"N{milestone} | {status}");
+    context.ReplyRaw($"  [1]{(passive.SelectedOption == 1 ? " <color=#8FFD50>[ESCOLHIDA]</color>" : string.Empty)} {passive.Option1.Name} - {passive.Option1.Description}");
+    context.ReplyRaw($"  [2]{(passive.SelectedOption == 2 ? " <color=#8FFD50>[ESCOLHIDA]</color>" : string.Empty)} {passive.Option2.Name} - {passive.Option2.Description}");
+
+    if (totalPages > 1) {
+      int nextPage = currentPage >= totalPages ? 1 : currentPage + 1;
+      context.ReplyRaw($"Pagina <color=#8FFD50>{currentPage}</color>/<color=#8FFD50>{totalPages}</color>. Use <color=#56B5E1>.prof passivas {details.DisplayName} {nextPage}</color> para ver a proxima pagina.");
     }
   }
 
@@ -322,3 +333,4 @@ public static class Commands {
     }
   }
 }
+

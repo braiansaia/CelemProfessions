@@ -41,14 +41,29 @@ public static class ProfessionExperienceConfigService {
   private static readonly Dictionary<int, int> LenhadorExtraAtMaxByTarget = [];
   private static readonly Dictionary<int, double> HerbalistaGatherExperienceByTarget = [];
   private static readonly Dictionary<int, int> HerbalistaExtraAtMaxByTarget = [];
+
+  private static readonly HashSet<int> MineradorGatherTargets = [];
+  private static readonly HashSet<int> LenhadorGatherTargets = [];
+  private static readonly HashSet<int> HerbalistaGatherTargets = [];
+
+  private static readonly Dictionary<int, PrefabGUID> MineradorYieldByTarget = [];
+  private static readonly Dictionary<int, int> MineradorRewardExtraAtMaxByTarget = [];
+  private static readonly Dictionary<int, bool> MineradorGoldByTarget = [];
+
+  private static readonly Dictionary<int, PrefabGUID> LenhadorYieldByTarget = [];
+  private static readonly Dictionary<int, PrefabGUID> LenhadorSeedByTarget = [];
+  private static readonly Dictionary<int, int> LenhadorRewardExtraAtMaxByTarget = [];
+  private static readonly Dictionary<int, int> LenhadorPassiveTierByTarget = [];
+
+  private static readonly Dictionary<int, PrefabGUID> HerbalistaYieldByTarget = [];
+  private static readonly Dictionary<int, PrefabGUID> HerbalistaSeedByTarget = [];
+  private static readonly Dictionary<int, int> HerbalistaRewardExtraAtMaxByTarget = [];
+  private static readonly Dictionary<int, int> HerbalistaPassiveTierByTarget = [];
+
   private static readonly Dictionary<int, double> AlquimistaCraftExperienceByItem = [];
   private static readonly Dictionary<int, double> CacadorExperienceByTarget = [];
   private static readonly Dictionary<int, int> CacadorExtraAtMaxByTarget = [];
   private static readonly Dictionary<int, PrefabGUID> CacadorLeatherDropByTarget = [];
-  private static readonly Dictionary<int, int> LenhadorPassiveTierByTarget = [];
-  private static readonly Dictionary<int, PrefabGUID> LenhadorPassiveDropByTarget = [];
-  private static readonly Dictionary<int, int> HerbalistaPassiveTierByTarget = [];
-  private static readonly Dictionary<int, PrefabGUID> HerbalistaPassiveDropByTarget = [];
   private static readonly Dictionary<int, bool> CacadorAggressiveByTarget = [];
   private static readonly HashSet<int> JoalheiroCraftItems = [];
   private static readonly HashSet<int> AlfaiateCraftItems = [];
@@ -108,21 +123,20 @@ public static class ProfessionExperienceConfigService {
       WriteFishingRegionConfigFile(PescadorRegionFilePath, BuildFishingRegionEntries());
     }
 
-    NormalizeGatherPassiveMetadataFile(LenhadorFilePath, ProfessionsTypes.Lenhador, gatherSnapshots, prefabSnapshots);
-    NormalizeGatherPassiveMetadataFile(HerbalistaFilePath, ProfessionsTypes.Herbalista, gatherSnapshots, prefabSnapshots);
+    NormalizeGatherMetadataFile(MineradorFilePath, ProfessionsTypes.Minerador, gatherSnapshots, prefabSnapshots);
+    NormalizeGatherMetadataFile(LenhadorFilePath, ProfessionsTypes.Lenhador, gatherSnapshots, prefabSnapshots);
+    NormalizeGatherMetadataFile(HerbalistaFilePath, ProfessionsTypes.Herbalista, gatherSnapshots, prefabSnapshots);
     NormalizeHunterAggressiveFile(CacadorFilePath, prefabSnapshots);
 
-    LenhadorPassiveTierByTarget.Clear();
-    LenhadorPassiveDropByTarget.Clear();
-    HerbalistaPassiveTierByTarget.Clear();
-    HerbalistaPassiveDropByTarget.Clear();
-    CacadorAggressiveByTarget.Clear();
-
     LoadEnabledEntries(MineradorFilePath, MineradorGatherExperienceByTarget, MineradorExtraAtMaxByTarget, true);
-    LoadEnabledEntries(LenhadorFilePath, LenhadorGatherExperienceByTarget, LenhadorExtraAtMaxByTarget, true, entry => RegisterGatherPassiveMetadata(entry, LenhadorPassiveTierByTarget, LenhadorPassiveDropByTarget));
-    LoadEnabledEntries(HerbalistaFilePath, HerbalistaGatherExperienceByTarget, HerbalistaExtraAtMaxByTarget, true, entry => RegisterGatherPassiveMetadata(entry, HerbalistaPassiveTierByTarget, HerbalistaPassiveDropByTarget));
+    LoadEnabledEntries(LenhadorFilePath, LenhadorGatherExperienceByTarget, LenhadorExtraAtMaxByTarget, true);
+    LoadEnabledEntries(HerbalistaFilePath, HerbalistaGatherExperienceByTarget, HerbalistaExtraAtMaxByTarget, true);
     LoadEnabledEntries(AlquimistaFilePath, AlquimistaCraftExperienceByItem, null, false);
     LoadEnabledEntries(CacadorFilePath, CacadorExperienceByTarget, CacadorExtraAtMaxByTarget, true, RegisterHunterAggressiveMetadata);
+
+    LoadGatherMetadata(MineradorFilePath, ProfessionsTypes.Minerador);
+    LoadGatherMetadata(LenhadorFilePath, ProfessionsTypes.Lenhador);
+    LoadGatherMetadata(HerbalistaFilePath, ProfessionsTypes.Herbalista);
 
     NormalizeFishingRegionConfigFile(PescadorRegionFilePath);
     LoadFishingRegionEntries(PescadorRegionFilePath);
@@ -138,14 +152,29 @@ public static class ProfessionExperienceConfigService {
     LenhadorExtraAtMaxByTarget.Clear();
     HerbalistaGatherExperienceByTarget.Clear();
     HerbalistaExtraAtMaxByTarget.Clear();
+
+    MineradorGatherTargets.Clear();
+    LenhadorGatherTargets.Clear();
+    HerbalistaGatherTargets.Clear();
+
+    MineradorYieldByTarget.Clear();
+    MineradorRewardExtraAtMaxByTarget.Clear();
+    MineradorGoldByTarget.Clear();
+
+    LenhadorYieldByTarget.Clear();
+    LenhadorSeedByTarget.Clear();
+    LenhadorRewardExtraAtMaxByTarget.Clear();
+    LenhadorPassiveTierByTarget.Clear();
+
+    HerbalistaYieldByTarget.Clear();
+    HerbalistaSeedByTarget.Clear();
+    HerbalistaRewardExtraAtMaxByTarget.Clear();
+    HerbalistaPassiveTierByTarget.Clear();
+
     AlquimistaCraftExperienceByItem.Clear();
     CacadorExperienceByTarget.Clear();
     CacadorExtraAtMaxByTarget.Clear();
     CacadorLeatherDropByTarget.Clear();
-    LenhadorPassiveTierByTarget.Clear();
-    LenhadorPassiveDropByTarget.Clear();
-    HerbalistaPassiveTierByTarget.Clear();
-    HerbalistaPassiveDropByTarget.Clear();
     CacadorAggressiveByTarget.Clear();
     JoalheiroCraftItems.Clear();
     AlfaiateCraftItems.Clear();
@@ -166,29 +195,84 @@ public static class ProfessionExperienceConfigService {
     };
   }
 
-  public static bool TryGetGatherPassiveConfiguration(ProfessionsTypes profession, PrefabGUID targetPrefab, out int passiveTier, out PrefabGUID passiveDropPrefab) {
+  public static bool TryGetGatherPassiveConfiguration(ProfessionsTypes profession, PrefabGUID targetPrefab, out int passiveTier, out PrefabGUID seedPrefab) {
     passiveTier = 0;
-    passiveDropPrefab = PrefabGUID.Empty;
+    seedPrefab = PrefabGUID.Empty;
     int key = targetPrefab.GuidHash;
 
     Dictionary<int, int> passiveTierByTarget;
-    Dictionary<int, PrefabGUID> passiveDropByTarget;
+    Dictionary<int, PrefabGUID> seedByTarget;
     switch (profession) {
       case ProfessionsTypes.Lenhador:
         passiveTierByTarget = LenhadorPassiveTierByTarget;
-        passiveDropByTarget = LenhadorPassiveDropByTarget;
+        seedByTarget = LenhadorSeedByTarget;
         break;
       case ProfessionsTypes.Herbalista:
         passiveTierByTarget = HerbalistaPassiveTierByTarget;
-        passiveDropByTarget = HerbalistaPassiveDropByTarget;
+        seedByTarget = HerbalistaSeedByTarget;
         break;
       default:
         return false;
     }
 
     bool hasTier = passiveTierByTarget.TryGetValue(key, out passiveTier) && passiveTier > 0;
-    bool hasDrop = passiveDropByTarget.TryGetValue(key, out passiveDropPrefab) && !passiveDropPrefab.IsEmpty();
-    return hasTier || hasDrop;
+    bool hasSeed = seedByTarget.TryGetValue(key, out seedPrefab) && !seedPrefab.IsEmpty();
+    return hasTier || hasSeed;
+  }
+
+  public static bool TryGetGatherRewardConfiguration(ProfessionsTypes profession, PrefabGUID targetPrefab, out PrefabGUID yieldPrefab, out PrefabGUID seedPrefab, out int extraAtMaxLevel, out bool goldEnabled, out int passiveTier) {
+    yieldPrefab = PrefabGUID.Empty;
+    seedPrefab = PrefabGUID.Empty;
+    extraAtMaxLevel = 0;
+    goldEnabled = false;
+    passiveTier = 0;
+
+    int key = targetPrefab.GuidHash;
+    HashSet<int> gatherTargets;
+    Dictionary<int, PrefabGUID> yieldByTarget;
+    Dictionary<int, PrefabGUID> seedByTarget;
+    Dictionary<int, int> extraByTarget;
+    Dictionary<int, int> passiveTierByTarget;
+
+    switch (profession) {
+      case ProfessionsTypes.Minerador:
+        gatherTargets = MineradorGatherTargets;
+        yieldByTarget = MineradorYieldByTarget;
+        seedByTarget = null;
+        extraByTarget = MineradorRewardExtraAtMaxByTarget;
+        passiveTierByTarget = null;
+        goldEnabled = !MineradorGoldByTarget.TryGetValue(key, out bool isGoldEnabled) || isGoldEnabled;
+        break;
+      case ProfessionsTypes.Lenhador:
+        gatherTargets = LenhadorGatherTargets;
+        yieldByTarget = LenhadorYieldByTarget;
+        seedByTarget = LenhadorSeedByTarget;
+        extraByTarget = LenhadorRewardExtraAtMaxByTarget;
+        passiveTierByTarget = LenhadorPassiveTierByTarget;
+        break;
+      case ProfessionsTypes.Herbalista:
+        gatherTargets = HerbalistaGatherTargets;
+        yieldByTarget = HerbalistaYieldByTarget;
+        seedByTarget = HerbalistaSeedByTarget;
+        extraByTarget = HerbalistaRewardExtraAtMaxByTarget;
+        passiveTierByTarget = HerbalistaPassiveTierByTarget;
+        break;
+      default:
+        return false;
+    }
+
+    if (!gatherTargets.Contains(key)) {
+      return false;
+    }
+
+    yieldByTarget.TryGetValue(key, out yieldPrefab);
+    seedByTarget?.TryGetValue(key, out seedPrefab);
+    extraByTarget?.TryGetValue(key, out extraAtMaxLevel);
+    if (passiveTierByTarget != null) {
+      passiveTierByTarget.TryGetValue(key, out passiveTier);
+    }
+
+    return true;
   }
 
   public static bool TryGetAlchemyCraftExperience(PrefabGUID itemPrefab, out double experience) {
@@ -232,17 +316,17 @@ public static class ProfessionExperienceConfigService {
   }
   public static bool TryResolveGatherProfession(PrefabGUID targetPrefab, out ProfessionsTypes profession) {
     int key = targetPrefab.GuidHash;
-    if (MineradorGatherExperienceByTarget.ContainsKey(key)) {
+    if (MineradorGatherTargets.Contains(key)) {
       profession = ProfessionsTypes.Minerador;
       return true;
     }
 
-    if (LenhadorGatherExperienceByTarget.ContainsKey(key)) {
+    if (LenhadorGatherTargets.Contains(key)) {
       profession = ProfessionsTypes.Lenhador;
       return true;
     }
 
-    if (HerbalistaGatherExperienceByTarget.ContainsKey(key)) {
+    if (HerbalistaGatherTargets.Contains(key)) {
       profession = ProfessionsTypes.Herbalista;
       return true;
     }
@@ -348,9 +432,8 @@ public static class ProfessionExperienceConfigService {
         continue;
       }
 
-      int passiveTier = ResolveGatherPassiveTier(profession, snapshot);
-      PrefabGUID passiveDropPrefab = PrefabGUID.Empty;
-      TryResolveGatherPassiveDropPrefab(profession, snapshot, saplingCandidates, plantSeedCandidates, out passiveDropPrefab);
+      PrefabGUID seedPrefab = PrefabGUID.Empty;
+      TryResolveGatherPassiveDropPrefab(profession, snapshot, saplingCandidates, plantSeedCandidates, out seedPrefab);
 
       bool enabled = !(profession == ProfessionsTypes.Herbalista && IsPlantFiberDrop(snapshot.YieldPrefab));
       entries[snapshot.PrefabGuid.GuidHash] = new ExperienceEntry {
@@ -359,8 +442,9 @@ public static class ProfessionExperienceConfigService {
         Name = snapshot.Name,
         EXP = DefaultGatherBaseExperience,
         MaxResourceYield = defaultExtraAtMax,
-        PassiveTier = passiveTier,
-        PassiveDropPrefabGUID = passiveDropPrefab.IsEmpty() ? null : passiveDropPrefab.GuidHash,
+        Yield = snapshot.YieldPrefab.IsEmpty() ? null : snapshot.YieldPrefab.GuidHash,
+        Seed = seedPrefab.IsEmpty() ? null : seedPrefab.GuidHash,
+        Gold = profession == ProfessionsTypes.Minerador ? true : null,
         Enabled = enabled
       };
     }
@@ -433,8 +517,8 @@ public static class ProfessionExperienceConfigService {
     return true;
   }
 
-  private static void NormalizeGatherPassiveMetadataFile(string path, ProfessionsTypes profession, List<GatherSnapshot> gatherSnapshots, List<PrefabSnapshot> prefabSnapshots) {
-    if (profession != ProfessionsTypes.Lenhador && profession != ProfessionsTypes.Herbalista) {
+  private static void NormalizeGatherMetadataFile(string path, ProfessionsTypes profession, List<GatherSnapshot> gatherSnapshots, List<PrefabSnapshot> prefabSnapshots) {
+    if (profession != ProfessionsTypes.Minerador && profession != ProfessionsTypes.Lenhador && profession != ProfessionsTypes.Herbalista) {
       return;
     }
 
@@ -457,13 +541,20 @@ public static class ProfessionExperienceConfigService {
         continue;
       }
 
-      if (entry.PassiveTier <= 0 && fallback.PassiveTier > 0) {
-        entry.PassiveTier = fallback.PassiveTier;
+      if ((!entry.Yield.HasValue || entry.Yield.Value == 0) && fallback.Yield.HasValue && fallback.Yield.Value != 0) {
+        entry.Yield = fallback.Yield.Value;
         changed = true;
       }
 
-      if ((!entry.PassiveDropPrefabGUID.HasValue || entry.PassiveDropPrefabGUID.Value == 0) && fallback.PassiveDropPrefabGUID.HasValue && fallback.PassiveDropPrefabGUID.Value != 0) {
-        entry.PassiveDropPrefabGUID = fallback.PassiveDropPrefabGUID;
+      if ((profession == ProfessionsTypes.Lenhador || profession == ProfessionsTypes.Herbalista)
+          && (!entry.Seed.HasValue || entry.Seed.Value == 0)
+          && fallback.Seed.HasValue && fallback.Seed.Value != 0) {
+        entry.Seed = fallback.Seed.Value;
+        changed = true;
+      }
+
+      if (profession == ProfessionsTypes.Minerador && !entry.Gold.HasValue) {
+        entry.Gold = fallback.Gold ?? true;
         changed = true;
       }
     }
@@ -517,9 +608,27 @@ public static class ProfessionExperienceConfigService {
     return candidates;
   }
 
-  private static int ResolveGatherPassiveTier(ProfessionsTypes profession, GatherSnapshot snapshot) {
+
+  private static int ResolveGatherPassiveTierFromEntry(ProfessionsTypes profession, ExperienceEntry entry) {
+    PrefabGUID yieldPrefab = entry.Yield.HasValue && entry.Yield.Value != 0 ? new PrefabGUID(entry.Yield.Value) : PrefabGUID.Empty;
+    PrefabGUID seedPrefab = entry.Seed.HasValue && entry.Seed.Value != 0 ? new PrefabGUID(entry.Seed.Value) : PrefabGUID.Empty;
+
+    string yieldName = yieldPrefab.IsEmpty() ? string.Empty : ProfessionCatalogService.GetNormalizedPrefabName(yieldPrefab);
+    string seedName = seedPrefab.IsEmpty() ? string.Empty : ProfessionCatalogService.GetNormalizedPrefabName(seedPrefab);
+    string source = (entry.Name + " " + (yieldPrefab.IsEmpty() ? string.Empty : ResolvePrefabName(yieldPrefab)) + " " + (seedPrefab.IsEmpty() ? string.Empty : ResolvePrefabName(seedPrefab))).ToLowerInvariant();
+
+    if (string.IsNullOrEmpty(yieldName) && !string.IsNullOrEmpty(seedName)) {
+      yieldName = seedName;
+    }
+
+    return ResolveGatherPassiveTier(profession, source, yieldName);
+  }
+
+  private static int ResolveGatherPassiveTier(ProfessionsTypes profession, string source, string yieldName) {
+    source ??= string.Empty;
+    yieldName ??= string.Empty;
+
     if (profession == ProfessionsTypes.Lenhador) {
-      string yieldName = ProfessionCatalogService.GetNormalizedPrefabName(snapshot.YieldPrefab);
       if (yieldName.Contains("wood_standard", StringComparison.Ordinal) || yieldName.Contains("_standard", StringComparison.Ordinal)) {
         return 25;
       }
@@ -540,7 +649,6 @@ public static class ProfessionExperienceConfigService {
     }
 
     if (profession == ProfessionsTypes.Herbalista) {
-      string source = (snapshot.Name + " " + ResolvePrefabName(snapshot.YieldPrefab)).ToLowerInvariant();
       if (ContainsAny(source, "sacredgrape", "grape", "ghostshroom", "plaguebrier")) {
         return 100;
       }
@@ -588,13 +696,7 @@ public static class ProfessionExperienceConfigService {
         continue;
       }
 
-      int score = 0;
-      foreach (string token in candidateTokens) {
-        if (sourceTokens.Contains(token)) {
-          score++;
-        }
-      }
-
+      int score = CalculateTokenMatchScore(sourceTokens, candidateTokens);
       if (score <= 0 || score < bestScore) {
         continue;
       }
@@ -652,11 +754,40 @@ public static class ProfessionExperienceConfigService {
       return;
     }
 
-    if (value is "item" or "ingredient" or "resource" or "building" or "seed" or "sapling" or "plants" or "plant" or "tree" or "wood" or "char" or "node" or "harvest" or "stone" or "drop" or "droptable" or "t01" or "t02" or "t03" or "t04" or "prefab") {
+    if (value is "item" or "ingredient" or "resource" or "building" or "seed" or "sapling" or "plants" or "plant" or "tree" or "wood" or "char" or "node" or "harvest" or "stone" or "drop" or "droptable" or "t01" or "t02" or "t03" or "t04" or "prefab" or "tm" or "stage0" or "stage1" or "stage2" or "stage3" or "stage4" or "stage5") {
       return;
     }
 
     tokens.Add(value);
+  }
+
+  private static int CalculateTokenMatchScore(HashSet<string> sourceTokens, HashSet<string> candidateTokens) {
+    int score = 0;
+    foreach (string candidateToken in candidateTokens) {
+      if (sourceTokens.Contains(candidateToken)) {
+        score += 3;
+        continue;
+      }
+
+      if (candidateToken.Length < 4) {
+        continue;
+      }
+
+      foreach (string sourceToken in sourceTokens) {
+        if (sourceToken.Length < 4) {
+          continue;
+        }
+
+        if (!sourceToken.Contains(candidateToken, StringComparison.Ordinal) && !candidateToken.Contains(sourceToken, StringComparison.Ordinal)) {
+          continue;
+        }
+
+        score += 1;
+        break;
+      }
+    }
+
+    return score;
   }
 
   private static bool ContainsAny(string source, params string[] values) {
@@ -669,13 +800,78 @@ public static class ProfessionExperienceConfigService {
     return false;
   }
 
-  private static void RegisterGatherPassiveMetadata(ExperienceEntry entry, Dictionary<int, int> passiveTierByTarget, Dictionary<int, PrefabGUID> passiveDropByTarget) {
-    if (entry.PassiveTier > 0) {
-      passiveTierByTarget[entry.PrefabGUID] = entry.PassiveTier;
+  private static void LoadGatherMetadata(string path, ProfessionsTypes profession) {
+    List<ExperienceEntry> entries = ReadEntries(path);
+
+    HashSet<int> gatherTargets;
+    Dictionary<int, PrefabGUID> yieldByTarget;
+    Dictionary<int, PrefabGUID> seedByTarget;
+    Dictionary<int, int> extraByTarget;
+    Dictionary<int, int> passiveTierByTarget;
+    Dictionary<int, bool> goldByTarget;
+
+    switch (profession) {
+      case ProfessionsTypes.Minerador:
+        gatherTargets = MineradorGatherTargets;
+        yieldByTarget = MineradorYieldByTarget;
+        seedByTarget = null;
+        extraByTarget = MineradorRewardExtraAtMaxByTarget;
+        passiveTierByTarget = null;
+        goldByTarget = MineradorGoldByTarget;
+        break;
+      case ProfessionsTypes.Lenhador:
+        gatherTargets = LenhadorGatherTargets;
+        yieldByTarget = LenhadorYieldByTarget;
+        seedByTarget = LenhadorSeedByTarget;
+        extraByTarget = LenhadorRewardExtraAtMaxByTarget;
+        passiveTierByTarget = LenhadorPassiveTierByTarget;
+        goldByTarget = null;
+        break;
+      case ProfessionsTypes.Herbalista:
+        gatherTargets = HerbalistaGatherTargets;
+        yieldByTarget = HerbalistaYieldByTarget;
+        seedByTarget = HerbalistaSeedByTarget;
+        extraByTarget = HerbalistaRewardExtraAtMaxByTarget;
+        passiveTierByTarget = HerbalistaPassiveTierByTarget;
+        goldByTarget = null;
+        break;
+      default:
+        return;
     }
 
-    if (entry.PassiveDropPrefabGUID.HasValue && entry.PassiveDropPrefabGUID.Value != 0) {
-      passiveDropByTarget[entry.PrefabGUID] = new PrefabGUID(entry.PassiveDropPrefabGUID.Value);
+    gatherTargets.Clear();
+    yieldByTarget.Clear();
+    seedByTarget?.Clear();
+    extraByTarget.Clear();
+    passiveTierByTarget?.Clear();
+    goldByTarget?.Clear();
+
+    for (int i = 0; i < entries.Count; i++) {
+      ExperienceEntry entry = entries[i];
+      if (entry == null || !entry.Enabled || entry.PrefabGUID == 0) {
+        continue;
+      }
+
+      gatherTargets.Add(entry.PrefabGUID);
+      if (entry.Yield.HasValue && entry.Yield.Value != 0) {
+        yieldByTarget[entry.PrefabGUID] = new PrefabGUID(entry.Yield.Value);
+      }
+
+      extraByTarget[entry.PrefabGUID] = Math.Max(0, entry.MaxResourceYield);
+      if (seedByTarget != null && entry.Seed.HasValue && entry.Seed.Value != 0) {
+        seedByTarget[entry.PrefabGUID] = new PrefabGUID(entry.Seed.Value);
+      }
+
+      if (passiveTierByTarget != null) {
+        int passiveTier = ResolveGatherPassiveTierFromEntry(profession, entry);
+        if (passiveTier > 0) {
+          passiveTierByTarget[entry.PrefabGUID] = passiveTier;
+        }
+      }
+
+      if (goldByTarget != null) {
+        goldByTarget[entry.PrefabGUID] = entry.Gold ?? true;
+      }
     }
   }
 
@@ -1077,6 +1273,27 @@ public static class ProfessionExperienceConfigService {
     }
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

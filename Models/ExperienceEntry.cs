@@ -7,12 +7,19 @@ public sealed class ExperienceEntry {
   public int PrefabGUID { get; set; }
   public string Name { get; set; } = string.Empty;
   public double EXP { get; set; }
+
   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
   public int MaxResourceYield { get; set; }
-  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-  public int PassiveTier { get; set; }
+
   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-  public int? PassiveDropPrefabGUID { get; set; }
+  public int? Yield { get; set; }
+
+  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+  public int? Seed { get; set; }
+
+  [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+  public bool? Gold { get; set; }
+
   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
   public bool? Aggressive { get; set; }
 

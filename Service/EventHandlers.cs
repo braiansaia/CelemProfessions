@@ -15,16 +15,19 @@ public static partial class ProfessionService {
   private static readonly PrefabGUID FishingTravelToTarget = PrefabGUIDs.AB_Fishing_Draw_TravelToTarget;
 
   public static void HandleGatherFromEntity(PlayerData player, Entity target, PrefabGUID targetPrefab) {
-    if (player == null || !target.Exists() || !target.TryGetBuffer(out DynamicBuffer<YieldResourcesOnDamageTaken> yields) || yields.IsEmpty) {
+    if (player == null || !target.Exists()) {
       return;
     }
 
-    PrefabGUID yieldPrefab = yields[0].ItemType;
     if (!ProfessionExperienceConfigService.TryResolveGatherProfession(targetPrefab, out ProfessionsTypes profession)) {
       return;
     }
 
-    HandleGatherEvent(new GatherEventData(player, targetPrefab, yieldPrefab, profession));
+    if (!ProfessionExperienceConfigService.TryGetGatherRewardConfiguration(profession, targetPrefab, out PrefabGUID configuredYield, out _, out _, out _, out _)) {
+      return;
+    }
+
+    HandleGatherEvent(new GatherEventData(player, targetPrefab, configuredYield, profession));
   }
 
   public static void HandleGatherEvent(in GatherEventData gatherEvent) {
@@ -32,24 +35,38 @@ public static partial class ProfessionService {
       return;
     }
 
-    double baseValue = ResolveGatherBaseExperience(gatherEvent, out int extraAtMaxLevel);
-    if (baseValue <= 0d) {
+    bool hasRewardConfig = ProfessionExperienceConfigService.TryGetGatherRewardConfiguration(
+      gatherEvent.Profession,
+      gatherEvent.TargetPrefab,
+      out PrefabGUID configuredYield,
+      out PrefabGUID configuredSeed,
+      out int extraAtMaxLevel,
+      out bool goldEnabled,
+      out int passiveTier);
+
+    double baseValue = ResolveGatherBaseExperience(gatherEvent);
+    if (baseValue <= 0d && !hasRewardConfig) {
       return;
     }
 
-    AddExperience(gatherEvent.Player, gatherEvent.Profession, baseValue, out _, out _, out _);
+    if (baseValue > 0d) {
+      AddExperience(gatherEvent.Player, gatherEvent.Profession, baseValue, out _, out _, out _);
+    }
+
+    PrefabGUID rewardYield = configuredYield;
     switch (gatherEvent.Profession) {
       case ProfessionsTypes.Minerador:
-        HandleMinerRewards(gatherEvent.Player, gatherEvent.YieldPrefab, extraAtMaxLevel);
+        HandleMinerRewards(gatherEvent.Player, rewardYield, extraAtMaxLevel, goldEnabled);
         break;
       case ProfessionsTypes.Lenhador:
-        HandleWoodRewards(gatherEvent.Player, gatherEvent.TargetPrefab, gatherEvent.YieldPrefab, extraAtMaxLevel);
+        HandleWoodRewards(gatherEvent.Player, rewardYield, configuredSeed, passiveTier, extraAtMaxLevel);
         break;
       case ProfessionsTypes.Herbalista:
-        HandleHerbalRewards(gatherEvent.Player, gatherEvent.TargetPrefab, gatherEvent.YieldPrefab, extraAtMaxLevel);
+        HandleHerbalRewards(gatherEvent.Player, rewardYield, configuredSeed, passiveTier, extraAtMaxLevel);
         break;
     }
   }
+
   public static void HandleHunterKillEvent(in HunterKillEventData hunterEvent) {
     if (hunterEvent.Player == null || !hunterEvent.Target.Exists() || hunterEvent.Target.IsPlayer()) {
       return;
@@ -67,6 +84,7 @@ public static partial class ProfessionService {
 
     HandleHunterPassiveRewards(hunterEvent.Player, leatherPrefab, aggressive);
   }
+
   public static void HandleFishingEvent(in FishingEventData fishingEvent) {
     if (fishingEvent.Player == null || !fishingEvent.Player.CharacterEntity.Exists()) {
       return;
@@ -80,6 +98,7 @@ public static partial class ProfessionService {
     AddExperience(fishingEvent.Player, ProfessionsTypes.Pescador, fishingExperience, out ProfessionProgressData progress, out _, out _);
     HandleFishingRewards(fishingEvent.Player, fishingEvent.FishingAreaPrefab, progress.Level);
   }
+
   public static void HandleFishingGameplayEvent(Entity entity) {
     if (!entity.TryGetComponent(out EntityOwner owner) || !owner.Owner.Exists() || !entity.TryGetComponent(out PrefabGUID prefabGuid) || !prefabGuid.Equals(FishingTravelToTarget)) {
       return;
@@ -98,10 +117,9 @@ public static partial class ProfessionService {
     HandleFishingEvent(new FishingEventData(player, dropTableBuffer[0].DropTableGuid));
   }
 
-  private static double ResolveGatherBaseExperience(in GatherEventData gatherEvent, out int extraAtMaxLevel) {
-    extraAtMaxLevel = 0;
+  private static double ResolveGatherBaseExperience(in GatherEventData gatherEvent) {
     return gatherEvent.Profession switch {
-      ProfessionsTypes.Minerador or ProfessionsTypes.Lenhador or ProfessionsTypes.Herbalista => ProfessionExperienceConfigService.TryGetGatherConfiguration(gatherEvent.Profession, gatherEvent.TargetPrefab, out double configuredExperience, out extraAtMaxLevel)
+      ProfessionsTypes.Minerador or ProfessionsTypes.Lenhador or ProfessionsTypes.Herbalista => ProfessionExperienceConfigService.TryGetGatherConfiguration(gatherEvent.Profession, gatherEvent.TargetPrefab, out double configuredExperience, out _)
         ? Math.Max(0d, configuredExperience)
         : 0d,
       _ => 0d
@@ -160,6 +178,7 @@ public static partial class ProfessionService {
         break;
     }
   }
+
   public static void HandleBuffSpawn(Entity buffEntity) {
     if (!buffEntity.Exists() || !buffEntity.TryGetComponent(out Buff buff) || !buff.Target.Exists() || !buff.Target.IsPlayer() || !buffEntity.TryGetComponent(out PrefabGUID buffPrefab) || !IsConsumableBuff(buffPrefab)) {
       return;
@@ -179,4 +198,6 @@ public static partial class ProfessionService {
     MessageService.SendInfo(playerData, $"Consumivel aprimorado aplicado: poder x{powerMultiplier:0.###} | duracao x{durationMultiplier:0.###}.");
   }
 }
+
+
 
